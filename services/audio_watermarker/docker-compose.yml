@@ -1,0 +1,22 @@
+services:
+  audio_watermarker:
+    build: .
+    container_name: nftones-audio-watermarker
+    ports:
+      - "127.0.0.1:8500:8500"   # localhost-only by design; expose via $LVTN nginx
+    volumes:
+      - watermark_data:/app/data
+    environment:
+      # MUST be overridden at deploy time from a real secrets manager.
+      NFTONES_WATERMARK_SECRET: ${NFTONES_WATERMARK_SECRET:-dev-secret-do-not-use-in-prod-32-bytes-min!}
+      NFTONES_PN_LENGTH: "1024"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8500/api/v1/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  watermark_data:
