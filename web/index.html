@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>NFTones — audio provenance for $LVTN</title>
+<meta name="description" content="NFT-based audio provenance and leak attribution for the Leviathan platform.">
+<link rel="preconnect" href="https://api.fontshare.com" crossorigin>
+<link rel="stylesheet" href="https://api.fontshare.com/v2/css?f[]=satoshi@500,700,900&f[]=jetbrains-mono@400,500,700&display=swap">
+<link rel="stylesheet" href="./styles.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b0d12'/%3E%3Cpath d='M7 22V10l5 7V10m4 12V10l5 7V10' stroke='%2342e2c5' stroke-width='2.2' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='25' cy='22' r='1.5' fill='%2342e2c5'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<!-- shell -->
+<aside class="sidebar" aria-label="primary navigation">
+  <div class="brand">
+    <a class="brand__mark" href="#dashboard" aria-label="NFTones home">
+      <svg viewBox="0 0 36 36" aria-hidden="true">
+        <rect width="36" height="36" rx="8" fill="var(--ink-2)"/>
+        <path d="M8 25V11l6 8V11M16 25V11l6 8V11" stroke="var(--accent)" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="28" cy="25" r="1.8" fill="var(--accent)"/>
+      </svg>
+      <span class="brand__name">NFTones</span>
+    </a>
+    <span class="brand__sub">a $LVTN module</span>
+  </div>
+
+  <nav class="nav">
+    <a class="nav__link is-active" data-view="dashboard"  href="#dashboard">  <span class="nav__dot"></span>Dashboard</a>
+    <a class="nav__link"           data-view="releases"   href="#releases">   <span class="nav__dot"></span>Release registry</a>
+    <a class="nav__link"           data-view="access"     href="#access">     <span class="nav__dot"></span>Wallet access</a>
+    <a class="nav__link"           data-view="watermarks" href="#watermarks"> <span class="nav__dot"></span>Watermark map</a>
+    <a class="nav__link"           data-view="leakcheck"  href="#leakcheck">  <span class="nav__dot"></span>Leak check</a>
+    <a class="nav__link"           data-view="evidence"   href="#evidence">   <span class="nav__dot"></span>Evidence</a>
+    <a class="nav__link"           data-view="token"      href="#token">      <span class="nav__dot"></span>Token flow</a>
+  </nav>
+
+  <div class="wallet-card">
+    <div class="wallet-card__row">
+      <span class="wallet-card__label">connected</span>
+      <span class="wallet-card__pill">Phantom</span>
+    </div>
+    <div class="wallet-card__addr">9xQe…A4mP</div>
+    <div class="wallet-card__bal">
+      <div><span class="bal__num" id="bal-ktrs">184.30</span><span class="bal__t">KTRS</span></div>
+      <div><span class="bal__num" id="bal-lvtn">1,820.50</span><span class="bal__t">LVTN</span></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <button class="icon-btn nav-toggle" aria-label="menu" id="navToggle">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="topbar__crumb" id="crumb">Dashboard</div>
+    <div class="topbar__spacer"></div>
+    <div class="topbar__actions">
+      <span class="env-pill"><i></i>devnet</span>
+      <button class="btn btn--ghost" id="searchBtn" aria-label="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      </button>
+      <button class="btn btn--primary" id="newReleaseBtn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 5v14M5 12h14"/></svg>
+        New release
+      </button>
+    </div>
+  </header>
+
+  <div class="views">
+
+    <!-- ============== DASHBOARD ============== -->
+    <section class="view is-active" data-view="dashboard">
+      <div class="hero">
+        <div class="hero__copy">
+          <div class="eyebrow">Creator studio</div>
+          <h1 class="hero__title">Every authorized copy, <em>uniquely traceable.</em></h1>
+          <p class="hero__lead">Anchor releases on Solana, mint wallet-bound access NFTs, and identify which copy leaked when one does. $KTRS pays for compute. $LVTN governs the protocol.</p>
+          <div class="hero__cta">
+            <button class="btn btn--primary" data-go="releases">Open release registry</button>
+            <button class="btn btn--ghost"   data-go="leakcheck">Run a leak check</button>
+          </div>
+        </div>
+        <div class="hero__viz" aria-hidden="true">
+          <div class="waveform" id="heroWave"></div>
+          <div class="hero__gridlines"></div>
+        </div>
+      </div>
+
+      <div class="kpis">
+        <div class="kpi">
+          <div class="kpi__label">Releases anchored</div>
+          <div class="kpi__num" data-count="3">0</div>
+          <div class="kpi__delta">+1 this week</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi__label">Wallet access NFTs</div>
+          <div class="kpi__num" data-count="16">0</div>
+          <div class="kpi__delta">across 12 wallets</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi__label">Leak scans run (30d)</div>
+          <div class="kpi__num" data-count="3">0</div>
+          <div class="kpi__delta">2 attributed</div>
+        </div>
+        <div class="kpi">
+          <div class="kpi__label">$KTRS spent (30d)</div>
+          <div class="kpi__num">9.10</div>
+          <div class="kpi__delta">≈ $11.40 USD</div>
+        </div>
+      </div>
+
+      <div class="grid grid--two">
+        <article class="card">
+          <header class="card__head">
+            <h3>Recent activity</h3>
+            <span class="card__sub">last 7 days</span>
+          </header>
+          <ul class="timeline" id="activityList"></ul>
+        </article>
+
+        <article class="card">
+          <header class="card__head">
+            <h3>Exposure by release</h3>
+            <span class="card__sub">access NFT count</span>
+          </header>
+          <div class="bars" id="exposureBars"></div>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============== RELEASES ============== -->
+    <section class="view" data-view="releases">
+      <header class="view__head">
+        <h2>Release registry</h2>
+        <p>Every release is hashed, fingerprinted, and anchored on Solana. Master audio lives in controlled storage — never on chain.</p>
+      </header>
+      <div class="release-grid" id="releaseGrid"></div>
+    </section>
+
+    <!-- ============== ACCESS ============== -->
+    <section class="view" data-view="access">
+      <header class="view__head">
+        <h2>Wallet access</h2>
+        <p>Each wallet on this list holds an access NFT. Each NFT references an opaque watermark ID (not the wallet) inside its metadata.</p>
+      </header>
+
+      <div class="filters">
+        <label class="select">
+          <span>Release</span>
+          <select id="accessReleaseFilter">
+            <option value="all">All releases</option>
+          </select>
+        </label>
+        <label class="select">
+          <span>Tier</span>
+          <select id="accessTierFilter">
+            <option value="all">All tiers</option>
+            <option>collaborator</option>
+            <option>label_admin</option>
+            <option>reviewer</option>
+            <option>listener</option>
+          </select>
+        </label>
+        <label class="select">
+          <span>Status</span>
+          <select id="accessStatusFilter">
+            <option value="all">All</option>
+            <option>active</option>
+            <option>revoked</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="table-wrap">
+        <table class="table" id="accessTable">
+          <thead>
+            <tr>
+              <th>Wallet</th>
+              <th>Release</th>
+              <th>Tier</th>
+              <th>Watermark ID</th>
+              <th>Status</th>
+              <th>Last access</th>
+              <th class="num">Risk</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============== WATERMARKS ============== -->
+    <section class="view" data-view="watermarks">
+      <header class="view__head">
+        <h2>Watermark assignment</h2>
+        <p>Each authorized wallet gets a perceptually identical but bit-distinct render. Payload layers below are illustrative; real payloads are HSM-wrapped.</p>
+      </header>
+
+      <div class="grid grid--two">
+        <article class="card">
+          <header class="card__head"><h3>Payload structure</h3></header>
+          <div class="payload">
+            <div class="payload__row">
+              <span class="payload__bits">24b</span>
+              <span class="payload__name">release_id</span>
+              <span class="payload__val">0x8f3a92</span>
+            </div>
+            <div class="payload__row">
+              <span class="payload__bits">32b</span>
+              <span class="payload__name">wallet_index</span>
+              <span class="payload__val">0xb1c7d4e6</span>
+            </div>
+            <div class="payload__row">
+              <span class="payload__bits">4b</span>
+              <span class="payload__name">version</span>
+              <span class="payload__val">0x1</span>
+            </div>
+            <div class="payload__row">
+              <span class="payload__bits">4b</span>
+              <span class="payload__name">crc</span>
+              <span class="payload__val">0xa</span>
+            </div>
+          </div>
+          <p class="card__note">The on-chain side never sees this payload. The wallet address is never embedded — only an opaque index into the controlled mapping table.</p>
+        </article>
+
+        <article class="card">
+          <header class="card__head"><h3>Embed layers</h3></header>
+          <div class="layers">
+            <div class="layer">
+              <div class="layer__head"><strong>A · Spread-spectrum</strong><span class="chip chip--ok">primary</span></div>
+              <div class="layer__bar"><i style="width:96%"></i></div>
+              <div class="layer__meta">2–6 kHz · 28 dB below masking · 64 bits</div>
+            </div>
+            <div class="layer">
+              <div class="layer__head"><strong>B · Echo-hiding</strong><span class="chip chip--ok">redundant</span></div>
+              <div class="layer__bar"><i style="width:80%"></i></div>
+              <div class="layer__meta">1ms / 2ms delays · 32 bits</div>
+            </div>
+            <div class="layer">
+              <div class="layer__head"><strong>C · Phase coding</strong><span class="chip">checksum</span></div>
+              <div class="layer__bar"><i style="width:55%"></i></div>
+              <div class="layer__meta">low-energy regions · 16 bits</div>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <article class="card" style="margin-top:24px">
+        <header class="card__head">
+          <h3>Watermark map</h3>
+          <span class="card__sub">creator-private · HSM-wrapped at rest</span>
+        </header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Watermark ID</th>
+                <th>Release</th>
+                <th>Wallet</th>
+                <th>Render hash</th>
+                <th>Layers</th>
+                <th class="num">Cost ($KTRS)</th>
+              </tr>
+            </thead>
+            <tbody id="wmTable"></tbody>
+          </table>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============== LEAK CHECK ============== -->
+    <section class="view" data-view="leakcheck">
+      <header class="view__head">
+        <h2>Leak check</h2>
+        <p>Upload a suspect file. The scanner extracts the watermark payload across three layers and matches it back to a wallet.</p>
+      </header>
+
+      <article class="card scan-card">
+        <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="upload suspect audio file">
+          <svg viewBox="0 0 48 48" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <path d="M24 30V8m0 0-7 7m7-7 7 7"/>
+            <path d="M8 32v6a2 2 0 0 0 2 2h28a2 2 0 0 0 2-2v-6"/>
+          </svg>
+          <div class="dz__title">Drop a suspect audio file, or click to choose</div>
+          <div class="dz__sub">MP3 / WAV / FLAC / M4A · up to 50 MB · cost <strong>1.40 $KTRS</strong></div>
+          <div class="dz__demo">
+            <span>Try a demo:</span>
+            <button class="chip chip--btn" data-demo="scan_001">leaked telegram clip</button>
+            <button class="chip chip--btn" data-demo="scan_002">low-bitrate rip</button>
+            <button class="chip chip--btn" data-demo="scan_003">unrelated file</button>
+          </div>
+        </div>
+
+        <div class="scanner" id="scanner" hidden>
+          <div class="scanner__head">
+            <div class="scanner__file" id="scanFile">—</div>
+            <div class="scanner__hash" id="scanHash">—</div>
+          </div>
+          <div class="scanner__stages">
+            <div class="stage" data-stage="upload">    <span class="stage__label">Upload &amp; hash</span>           <span class="stage__pct">0%</span></div>
+            <div class="stage" data-stage="fingerprint"><span class="stage__label">Perceptual fingerprint</span>   <span class="stage__pct">0%</span></div>
+            <div class="stage" data-stage="layerA">    <span class="stage__label">Layer A · spread-spectrum</span><span class="stage__pct">0%</span></div>
+            <div class="stage" data-stage="layerB">    <span class="stage__label">Layer B · echo-hiding</span>    <span class="stage__pct">0%</span></div>
+            <div class="stage" data-stage="layerC">    <span class="stage__label">Layer C · phase coding</span>   <span class="stage__pct">0%</span></div>
+            <div class="stage" data-stage="match">     <span class="stage__label">Cross-reference mapping table</span><span class="stage__pct">0%</span></div>
+          </div>
+
+          <div class="scan-result" id="scanResult" hidden>
+            <!-- filled by JS -->
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ============== EVIDENCE ============== -->
+    <section class="view" data-view="evidence">
+      <header class="view__head">
+        <h2>Evidence reports</h2>
+        <p>Signed, hashed, and anchored to Solana. The wallet identified is held creator-private.</p>
+      </header>
+      <div id="evidenceList"></div>
+    </section>
+
+    <!-- ============== TOKEN ============== -->
+    <section class="view" data-view="token">
+      <header class="view__head">
+        <h2>Token flow</h2>
+        <p>$KTRS pays for media compute (watermarking, scanning, anchoring). $LVTN captures platform value and governs policy.</p>
+      </header>
+
+      <div class="grid grid--two">
+        <article class="card token-card token-card--ktrs">
+          <div class="token-card__head">
+            <div>
+              <h3>$KTRS</h3>
+              <p>Utility · pays for compute</p>
+            </div>
+            <div class="token-card__bal">
+              <div class="token-card__num">184.30</div>
+              <div class="token-card__sub">liquid balance</div>
+            </div>
+          </div>
+          <ul class="token-uses">
+            <li><span>Register release</span><b>2.80</b></li>
+            <li><span>Mint access NFT (per wallet)</span><b>0.20</b></li>
+            <li><span>Render watermarked copy</span><b>0.40</b></li>
+            <li><span>Leak scan (≤ 25 MB)</span><b>1.40</b></li>
+            <li><span>Evidence report + anchor</span><b>0.90</b></li>
+          </ul>
+        </article>
+
+        <article class="card token-card token-card--lvtn">
+          <div class="token-card__head">
+            <div>
+              <h3>$LVTN</h3>
+              <p>Governance · captures ecosystem value</p>
+            </div>
+            <div class="token-card__bal">
+              <div class="token-card__num">12,400</div>
+              <div class="token-card__sub">staked · 1,820.50 liquid</div>
+            </div>
+          </div>
+          <ul class="token-uses">
+            <li><span>Platform fee (per anchor)</span><b>0.04</b></li>
+            <li><span>Creator verification stake</span><b>≥ 5,000</b></li>
+            <li><span>Premium evidence tier</span><b>≥ 10,000 staked</b></li>
+            <li><span>Vote on fee curves</span><b>1 vote / staked</b></li>
+            <li><span>Weekly staker yield (last)</span><b>0.07</b></li>
+          </ul>
+        </article>
+      </div>
+
+      <article class="card" style="margin-top:24px">
+        <header class="card__head"><h3>Recent token events</h3></header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>When</th><th>Kind</th><th>Reason</th><th class="num">Amount</th><th>Token</th></tr>
+            </thead>
+            <tbody id="tokenTable"></tbody>
+          </table>
+        </div>
+      </article>
+
+      <article class="card token-flow" style="margin-top:24px">
+        <header class="card__head"><h3>Flow diagram</h3></header>
+        <div class="flow">
+          <div class="flow__node flow__node--creator"><b>Creator</b><span>spends $KTRS</span></div>
+          <div class="flow__edge">→</div>
+          <div class="flow__node flow__node--proto"><b>NFTones protocol</b><span>compute · anchoring</span></div>
+          <div class="flow__edge">→</div>
+          <div class="flow__node flow__node--treas"><b>Treasury</b><span>fees in $LVTN</span></div>
+          <div class="flow__edge flow__edge--down">↓</div>
+          <div class="flow__node flow__node--stakers"><b>$LVTN stakers</b><span>governance + yield</span></div>
+        </div>
+      </article>
+    </section>
+
+  </div>
+
+  <footer class="foot">
+    <div>NFTones MVP · prototype against mock data · no real audio, no real wallets.</div>
+    <div>Module of <span class="foot__brand">Leviathan ($LVTN)</span></div>
+  </footer>
+</main>
+
+<!-- ============== MODAL: New release ============== -->
+<div class="modal" id="newReleaseModal" hidden>
+  <div class="modal__backdrop" data-close></div>
+  <div class="modal__panel" role="dialog" aria-labelledby="nrTitle" aria-modal="true">
+    <header class="modal__head">
+      <h3 id="nrTitle">Register a new release</h3>
+      <button class="icon-btn" data-close aria-label="close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </header>
+    <form class="modal__body" id="newReleaseForm">
+      <label class="field"><span>Title</span><input name="title" placeholder="Halcyon Drift" required></label>
+      <label class="field"><span>Artist</span><input name="artist" placeholder="Mira Othen" required></label>
+      <label class="field">
+        <span>Master file</span>
+        <div class="file-pick">
+          <span id="masterFileName" class="file-pick__name">no file selected</span>
+          <button type="button" class="btn btn--ghost btn--sm" id="masterPickBtn">Choose file</button>
+          <input type="file" name="master" id="masterPick" accept="audio/*" hidden>
+        </div>
+      </label>
+      <label class="field">
+        <span>Initial wallet access (one per line)</span>
+        <textarea name="wallets" rows="4" placeholder="9xQe...A4mP&#10;B7tF...Lq2N"></textarea>
+      </label>
+      <div class="modal__costs">
+        <div><span>Anchor + fingerprint</span><b>2.80 $KTRS</b></div>
+        <div><span>Per access NFT</span><b>0.20 $KTRS</b></div>
+        <div><span>Per wallet render</span><b>0.40 $KTRS</b></div>
+        <div class="modal__total"><span>Estimated total</span><b id="nrTotal">2.80 $KTRS</b></div>
+      </div>
+      <footer class="modal__foot">
+        <button type="button" class="btn btn--ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn--primary">Anchor &amp; mint</button>
+      </footer>
+    </form>
+  </div>
+</div>
+
+<!-- ============== TOAST ============== -->
+<div class="toast" id="toast" hidden>
+  <div class="toast__icon">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 13 4 4L19 7"/></svg>
+  </div>
+  <div class="toast__msg" id="toastMsg">Done</div>
+</div>
+
+<script src="../mock-data/data.js"></script>
+<script src="./app.js"></script>
+</body>
+</html>

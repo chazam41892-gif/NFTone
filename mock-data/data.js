@@ -1,0 +1,186 @@
+// NFTones — mock data for the prototype.
+// All wallet addresses, release titles, and audio file names are fictional.
+// No copyrighted material is referenced. No real PII.
+
+window.NFTONES_MOCK = (() => {
+  const wallets = [
+    { wallet: "9xQe...A4mP", label: "Producer — Kael Voss",         tier: "collaborator", verified: true,  risk: 12 },
+    { wallet: "B7tF...Lq2N", label: "Mix engineer — Studio Forty",   tier: "collaborator", verified: true,  risk:  8 },
+    { wallet: "Dm3H...rZ9W", label: "Mastering — Ridge Mastering",   tier: "collaborator", verified: true,  risk:  6 },
+    { wallet: "F5kP...vXc1", label: "Label A&R — Sable Records",     tier: "label_admin",  verified: true,  risk: 22 },
+    { wallet: "G2nJ...Ts4Y", label: "Press reviewer — Hum Magazine", tier: "reviewer",     verified: false, risk: 41 },
+    { wallet: "H8rL...Mb6K", label: "Press reviewer — Static Zine",  tier: "reviewer",     verified: false, risk: 67 },
+    { wallet: "J9pQ...Nx3D", label: "DJ promo — Late Night Rotation",tier: "reviewer",     verified: false, risk: 54 },
+    { wallet: "K4sB...Wf8V", label: "Early access #001",             tier: "listener",     verified: false, risk: 18 },
+    { wallet: "L7vG...Hp2T", label: "Early access #002",             tier: "listener",     verified: true,  risk:  9 },
+    { wallet: "M3wR...Ce5X", label: "Early access #003",             tier: "listener",     verified: false, risk: 27 },
+    { wallet: "N6yU...Aj1Q", label: "Tour crew — FOH",               tier: "collaborator", verified: true,  risk: 15 },
+    { wallet: "P1zS...Bk7R", label: "Sync agent — Hollow Sync",      tier: "label_admin",  verified: true,  risk: 31 },
+  ];
+
+  const releases = [
+    {
+      id: "rel_001",
+      title: "Halcyon Drift",
+      artist: "Mira Othen",
+      slug: "halcyon-drift",
+      duration_sec: 224,
+      master_hash: "blake3:8f3a92b1c7d4e6a2f0b8c5d3e1a4f7b9c2d5e8a1f4b7c0d3e6a9f2b5c8d1e4a7",
+      fingerprint_uri: "store://fingerprints/rel_001.fp",
+      anchor_tx: "5KX...solana_tx_8a2",
+      created_at: "2025-09-14T11:02:00Z",
+      access_count: 7,
+      renders: 7,
+      revoked: false,
+      cover_hue: 188,
+      art_style: "tidal",
+    },
+    {
+      id: "rel_002",
+      title: "Brassknuckle Lullaby",
+      artist: "Mira Othen",
+      slug: "brassknuckle-lullaby",
+      duration_sec: 197,
+      master_hash: "blake3:1a4f7b9c2d5e8a1f4b7c0d3e6a9f2b5c8d1e4a78f3a92b1c7d4e6a2f0b8c5d3e",
+      fingerprint_uri: "store://fingerprints/rel_002.fp",
+      anchor_tx: "5KX...solana_tx_4c1",
+      created_at: "2025-10-02T15:48:00Z",
+      access_count: 5,
+      renders: 5,
+      revoked: false,
+      cover_hue: 14,
+      art_style: "ember",
+    },
+    {
+      id: "rel_003",
+      title: "Quiet Machine (single)",
+      artist: "Mira Othen",
+      slug: "quiet-machine",
+      duration_sec: 168,
+      master_hash: "blake3:c8d1e4a78f3a92b1c7d4e6a2f0b8c5d3e1a4f7b9c2d5e8a1f4b7c0d3e6a9f2b5",
+      fingerprint_uri: "store://fingerprints/rel_003.fp",
+      anchor_tx: "5KX...solana_tx_b9e",
+      created_at: "2025-10-21T09:30:00Z",
+      access_count: 4,
+      renders: 4,
+      revoked: false,
+      cover_hue: 268,
+      art_style: "vapor",
+    },
+  ];
+
+  // Access grants (release × wallet → watermark_id)
+  const grants = [
+    // Halcyon Drift
+    { id: "gr_01", release_id: "rel_001", wallet: "9xQe...A4mP", watermark_id: "wm_8f3a92b1", tier: "collaborator", status: "active",     minted_at: "2025-09-14T11:10:00Z", last_access: "2025-10-30T18:12:00Z" },
+    { id: "gr_02", release_id: "rel_001", wallet: "B7tF...Lq2N", watermark_id: "wm_a7c4f203", tier: "collaborator", status: "active",     minted_at: "2025-09-14T11:11:00Z", last_access: "2025-10-22T09:04:00Z" },
+    { id: "gr_03", release_id: "rel_001", wallet: "Dm3H...rZ9W", watermark_id: "wm_3e91b6d8", tier: "collaborator", status: "active",     minted_at: "2025-09-14T11:11:00Z", last_access: "2025-10-15T14:33:00Z" },
+    { id: "gr_04", release_id: "rel_001", wallet: "F5kP...vXc1", watermark_id: "wm_5d72ef10", tier: "label_admin",  status: "active",     minted_at: "2025-09-15T08:00:00Z", last_access: "2025-11-01T07:50:00Z" },
+    { id: "gr_05", release_id: "rel_001", wallet: "G2nJ...Ts4Y", watermark_id: "wm_b40c81a5", tier: "reviewer",     status: "active",     minted_at: "2025-09-20T10:40:00Z", last_access: "2025-10-10T22:08:00Z" },
+    { id: "gr_06", release_id: "rel_001", wallet: "H8rL...Mb6K", watermark_id: "wm_2f8d49c7", tier: "reviewer",     status: "active",     minted_at: "2025-09-20T10:40:00Z", last_access: "2025-10-28T16:41:00Z" },
+    { id: "gr_07", release_id: "rel_001", wallet: "J9pQ...Nx3D", watermark_id: "wm_6a1e7b3f", tier: "reviewer",     status: "active",     minted_at: "2025-09-22T12:15:00Z", last_access: "2025-10-29T20:55:00Z" },
+
+    // Brassknuckle Lullaby
+    { id: "gr_08", release_id: "rel_002", wallet: "9xQe...A4mP", watermark_id: "wm_91c5d702", tier: "collaborator", status: "active",     minted_at: "2025-10-02T16:00:00Z", last_access: "2025-10-30T11:20:00Z" },
+    { id: "gr_09", release_id: "rel_002", wallet: "B7tF...Lq2N", watermark_id: "wm_4b2e8f15", tier: "collaborator", status: "active",     minted_at: "2025-10-02T16:01:00Z", last_access: "2025-10-29T08:14:00Z" },
+    { id: "gr_10", release_id: "rel_002", wallet: "F5kP...vXc1", watermark_id: "wm_d3a96c40", tier: "label_admin",  status: "active",     minted_at: "2025-10-03T09:30:00Z", last_access: "2025-11-01T07:51:00Z" },
+    { id: "gr_11", release_id: "rel_002", wallet: "P1zS...Bk7R", watermark_id: "wm_7e08b1a9", tier: "label_admin",  status: "revoked",    minted_at: "2025-10-04T14:00:00Z", last_access: "2025-10-19T11:00:00Z", revoked_at: "2025-10-25T09:00:00Z" },
+    { id: "gr_12", release_id: "rel_002", wallet: "K4sB...Wf8V", watermark_id: "wm_5c4f12d8", tier: "listener",     status: "active",     minted_at: "2025-10-12T18:20:00Z", last_access: "2025-10-30T22:00:00Z" },
+
+    // Quiet Machine
+    { id: "gr_13", release_id: "rel_003", wallet: "9xQe...A4mP", watermark_id: "wm_a82f6e30", tier: "collaborator", status: "active",     minted_at: "2025-10-21T09:40:00Z", last_access: "2025-10-31T19:00:00Z" },
+    { id: "gr_14", release_id: "rel_003", wallet: "L7vG...Hp2T", watermark_id: "wm_2d70bcf1", tier: "listener",     status: "active",     minted_at: "2025-10-22T11:10:00Z", last_access: "2025-10-31T15:10:00Z" },
+    { id: "gr_15", release_id: "rel_003", wallet: "M3wR...Ce5X", watermark_id: "wm_e1b4587c", tier: "listener",     status: "active",     minted_at: "2025-10-23T13:25:00Z", last_access: "2025-10-30T20:42:00Z" },
+    { id: "gr_16", release_id: "rel_003", wallet: "N6yU...Aj1Q", watermark_id: "wm_03c98a26", tier: "collaborator", status: "active",     minted_at: "2025-10-24T16:00:00Z", last_access: "2025-10-29T09:15:00Z" },
+  ];
+
+  // Pre-canned leak scans (some matched, some not)
+  const scans = [
+    {
+      id: "scan_001",
+      release_id: "rel_001",
+      release_title: "Halcyon Drift",
+      uploaded_at: "2025-10-30T22:14:00Z",
+      input_filename: "halcyon_drift_LEAK_telegram_clip.mp3",
+      input_hash: "blake3:7c0d3e6a9f2b5c8d1e4a78f3a92b1c7d4e6a2f0b8c5d3e1a4f7b9c2d5e8a1f4b",
+      input_size_mb: 4.8,
+      status: "matched",
+      matched_wm_id: "wm_2f8d49c7",
+      matched_grant_id: "gr_06",
+      matched_wallet: "H8rL...Mb6K",
+      confidence: 92,
+      layers_recovered: { A: true, B: true, C: false },
+      transcodes_estimated: 1,
+      ktrs_cost: "1.40",
+    },
+    {
+      id: "scan_002",
+      release_id: "rel_002",
+      release_title: "Brassknuckle Lullaby",
+      uploaded_at: "2025-10-28T17:02:00Z",
+      input_filename: "brassknuckle_lullaby_RIP_192k.mp3",
+      input_hash: "blake3:e6a9f2b5c8d1e4a78f3a92b1c7d4e6a2f0b8c5d3e1a4f7b9c2d5e8a1f4b7c0d3",
+      input_size_mb: 3.1,
+      status: "matched",
+      matched_wm_id: "wm_7e08b1a9",
+      matched_grant_id: "gr_11",
+      matched_wallet: "P1zS...Bk7R",
+      confidence: 78,
+      layers_recovered: { A: false, B: true, C: false },
+      transcodes_estimated: 2,
+      ktrs_cost: "1.40",
+    },
+    {
+      id: "scan_003",
+      release_id: "rel_001",
+      release_title: "Halcyon Drift",
+      uploaded_at: "2025-10-25T10:11:00Z",
+      input_filename: "unknown_audio_clip.m4a",
+      input_hash: "blake3:f0b8c5d3e1a4f7b9c2d5e8a1f4b7c0d3e6a9f2b5c8d1e4a78f3a92b1c7d4e6a2",
+      input_size_mb: 5.6,
+      status: "nomatch",
+      confidence: 0,
+      layers_recovered: { A: false, B: false, C: false },
+      ktrs_cost: "1.40",
+      notes: "No NFTones watermark detected. Perceptual fingerprint did match release master at 0.94 — file is the song, but a non-NFTones source (e.g. CD rip, pre-NFTones master).",
+    },
+  ];
+
+  const evidenceReports = [
+    {
+      id: "ev_001",
+      scan_id: "scan_001",
+      release_id: "rel_001",
+      matched_wallet: "H8rL...Mb6K",
+      wallet_label: "Press reviewer — Static Zine",
+      confidence: 92,
+      generated_at: "2025-10-30T22:31:00Z",
+      report_hash: "blake3:b6a4d8e1f7c903a2",
+      on_chain_anchor: "5KX...evidence_tx_a4e",
+      nft_history: [
+        { event: "mint",     to: "H8rL...Mb6K", at: "2025-09-20T10:40:00Z", tx: "5KX...mint_a1" },
+      ],
+    },
+  ];
+
+  const tokenEvents = [
+    { kind: "ktrs_debit",        amount: "2.80", token: "KTRS", reason: "register: rel_003",       at: "2025-10-21T09:30:05Z" },
+    { kind: "ktrs_debit",        amount: "0.40", token: "KTRS", reason: "embed: gr_13",            at: "2025-10-21T09:40:14Z" },
+    { kind: "ktrs_debit",        amount: "0.40", token: "KTRS", reason: "embed: gr_14",            at: "2025-10-22T11:10:09Z" },
+    { kind: "ktrs_debit",        amount: "0.40", token: "KTRS", reason: "embed: gr_15",            at: "2025-10-23T13:25:11Z" },
+    { kind: "ktrs_debit",        amount: "1.40", token: "KTRS", reason: "scan: scan_003",          at: "2025-10-25T10:11:30Z" },
+    { kind: "ktrs_debit",        amount: "1.40", token: "KTRS", reason: "scan: scan_002",          at: "2025-10-28T17:02:18Z" },
+    { kind: "ktrs_debit",        amount: "1.40", token: "KTRS", reason: "scan: scan_001",          at: "2025-10-30T22:14:22Z" },
+    { kind: "ktrs_debit",        amount: "0.90", token: "KTRS", reason: "evidence: ev_001 (anchor)", at: "2025-10-30T22:31:00Z" },
+    { kind: "lvtn_fee",          amount: "0.12", token: "LVTN", reason: "platform fee: rel_003",   at: "2025-10-21T09:30:05Z" },
+    { kind: "lvtn_fee",          amount: "0.04", token: "LVTN", reason: "platform fee: ev_001",    at: "2025-10-30T22:31:00Z" },
+    { kind: "lvtn_stake_reward", amount: "0.07", token: "LVTN", reason: "weekly staker distribution", at: "2025-10-27T00:00:00Z" },
+  ];
+
+  const balances = {
+    KTRS: "184.30",
+    LVTN: "12,400.00 staked / 1,820.50 liquid",
+  };
+
+  return { wallets, releases, grants, scans, evidenceReports, tokenEvents, balances };
+})();
