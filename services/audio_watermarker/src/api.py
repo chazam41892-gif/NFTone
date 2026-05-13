@@ -34,7 +34,146 @@ from fastapi.responses import StreamingResponse
 from . import __version__
 from .crypto import derive_pn_sequence, wallet_fingerprint
 from .storage import WatermarkStore
-from .watermarker import WatermarkParams, detect, embed
+from .watermarker import (
+    WatermarkParams,
+    detect,
+    detect_stereo,
+    embed,
+    embed_stereo,
+)
+
+# Optional pydub for mp3/aac/flac. ffmpeg must be installed in the runtime.
+try:
+    from pydub import AudioSegment  # type: ignore
+
+    _PYDUB_OK = True
+except Exception:
+    AudioSegment = None  # type: ignore
+    _PYDUB_OK = False
+
+
+_FORMAT_ALIASES = {
+    "audio/wav": "wav",
+    "audio/x-wav": "wav",
+    "audio/wave": "wav",
+    "audio/mpeg": "mp3",
+    "audio/mp3": "mp3",
+    "audio/aac": "aac",
+    "audio/mp4": "m4a",
+    "audio/x-m4a": "m4a",
+    "audio/m4a": "m4a",
+    "audio/flac": "flac",
+    "audio/x-flac": "flac",
+}
+
+
+def _format_from_filename(name: str | None) -> str | None:
+    if not name:
+        return None
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    if ext in {"wav", "mp3", "aac", "m4a", "flac"}:
+        return ext
+    return None
+
+
+def _resolve_format(content_type: str | None, filename: str | None) -> str:
+    """Pick a canonical format tag for in/out encoding."""
+    ext = _format_from_filename(filename)
+    if ext:
+        return ext
+    if content_type and content_type.lower() in _FORMAT_ALIASES:
+        return _FORMAT_ALIASES[content_type.lower()]
+    return "wav"
+
+
+def _load_audio(
+    blob: bytes, content_type: str | None, filename: str | None
+) -> tuple[np.ndarray, int, str, bool]:
+    """Decode any of wav/mp3/aac/m4a/flac → (samples, sr, fmt, is_stereo).
+
+    Returns:
+        samples: (n,) mono or (n,2) stereo float32 in [-1, 1]
+        sr: sample rate
+        fmt: canonical format tag ('wav'|'mp3'|'aac'|'m4a'|'flac')
+        is_stereo: True if the source was stereo (we preserve it)
+    """
+    fmt = _resolve_format(content_type, filename)
+    if fmt == "wav":
+        try:
+            audio, sr = sf.read(io.BytesIO(blob), dtype="float32", always_2d=False)
+        except Exception as e:
+            raise HTTPException(400, f"Could not parse WAV: {e}")
+        is_stereo = audio.ndim == 2 and audio.shape[1] == 2
+        return audio.astype(np.float32), int(sr), fmt, is_stereo
+
+    # mp3 / aac / m4a / flac via pydub+ffmpeg
+    if not _PYDUB_OK:
+        raise HTTPException(
+            415,
+            f"format={fmt} requires pydub+ffmpeg. Install ffmpeg and `pip install pydub`.",
+        )
+    try:
+        seg = AudioSegment.from_file(io.BytesIO(blob), format=fmt)
+    except Exception as e:
+        raise HTTPException(400, f"Could not decode {fmt}: {e}")
+    sr = int(seg.frame_rate)
+    channels = int(seg.channels)
+    samples = np.array(seg.get_array_of_samples(), dtype=np.float32)
+    # Normalize integer PCM into [-1, 1]
+    max_amp = float(1 << (8 * seg.sample_width - 1))
+    samples = samples / max_amp
+    if channels == 2:
+        samples = samples.reshape(-1, 2)
+        is_stereo = True
+    else:
+        is_stereo = False
+    return samples, sr, fmt, is_stereo
+
+
+def _encode_audio(
+    samples: np.ndarray, sr: int, fmt: str
+) -> tuple[bytes, str]:
+    """Encode float32 samples back to the requested format.
+
+    Returns (bytes, mime_type).
+    """
+    if fmt == "wav":
+        buf = io.BytesIO()
+        sf.write(buf, samples, sr, format="WAV", subtype="FLOAT")
+        return buf.getvalue(), "audio/wav"
+
+    if not _PYDUB_OK:
+        raise HTTPException(415, f"encoding {fmt} requires pydub+ffmpeg")
+
+    # pydub wants int16 PCM. Clip + scale.
+    arr = np.clip(samples, -1.0, 1.0)
+    if arr.ndim == 2:
+        channels = arr.shape[1]
+        interleaved = (arr * 32767.0).astype(np.int16).tobytes()
+    else:
+        channels = 1
+        interleaved = (arr * 32767.0).astype(np.int16).tobytes()
+    seg = AudioSegment(
+        data=interleaved,
+        sample_width=2,
+        frame_rate=sr,
+        channels=channels,
+    )
+    buf = io.BytesIO()
+    if fmt == "mp3":
+        seg.export(buf, format="mp3", bitrate="192k")
+        mime = "audio/mpeg"
+    elif fmt == "aac" or fmt == "m4a":
+        # ffmpeg-aac via mp4 container (most portable)
+        seg.export(buf, format="ipod", bitrate="192k")  # 'ipod' = mp4/aac
+        mime = "audio/mp4"
+    elif fmt == "flac":
+        seg.export(buf, format="flac")
+        mime = "audio/flac"
+    else:
+        seg.export(buf, format="wav")
+        mime = "audio/wav"
+    return buf.getvalue(), mime
 
 # Master secret for PN sequence derivation. In production this MUST come
 # from a secrets manager (Vault, AWS Secrets Manager, Cloudflare Worker
@@ -64,19 +203,18 @@ _store = WatermarkStore(_DB_PATH)
 
 
 def _load_wav(blob: bytes) -> tuple[np.ndarray, int]:
-    """Load WAV bytes → (mono float32 samples in [-1,1], sample_rate)."""
+    """Legacy WAV-only loader. Kept for backward compatibility with old tests."""
     try:
         audio, sr = sf.read(io.BytesIO(blob), dtype="float32", always_2d=False)
     except Exception as e:
         raise HTTPException(400, f"Could not parse audio (WAV required): {e}")
     if audio.ndim == 2:
-        # Stereo → mono. We lose stereo information; v2 will preserve it.
         audio = audio.mean(axis=1).astype(np.float32)
     return audio, int(sr)
 
 
 def _sha256_audio(audio: np.ndarray, sample_rate: int) -> str:
-    """SHA-256 of the canonical (float32, mono, native byte order) audio."""
+    """SHA-256 of the canonical (float32, native byte order) audio."""
     h = hashlib.sha256()
     h.update(sample_rate.to_bytes(4, "little"))
     h.update(audio.astype(np.float32).tobytes())
@@ -104,9 +242,11 @@ async def embed_endpoint(
     wallet_id: str = Form(..., description="Buyer's wallet identifier"),
     alpha: Optional[float] = Form(None, description="Embedding strength override"),
 ) -> StreamingResponse:
-    """Embed a watermark and return the watermarked WAV."""
+    """Embed a watermark and return the watermarked audio in the SAME format uploaded."""
     blob = await audio.read()
-    samples, sr = _load_wav(blob)
+    samples, sr, fmt, is_stereo = _load_audio(
+        blob, audio.content_type, audio.filename
+    )
     master_hash = _sha256_audio(samples, sr)
 
     params = WatermarkParams(sample_rate=sr)
@@ -116,7 +256,12 @@ async def embed_endpoint(
         params = WatermarkParams(sample_rate=sr, alpha=alpha)
 
     pn = derive_pn_sequence(wallet_id, _SECRET, length=_PN_LENGTH)
-    watermarked = embed(samples, pn, params)
+    if is_stereo:
+        watermarked = embed_stereo(samples, pn, params)
+    else:
+        # If we got mono-as-2D (unlikely) flatten.
+        mono = samples if samples.ndim == 1 else samples.mean(axis=1).astype(np.float32)
+        watermarked = embed(mono, pn, params)
     derivative_hash = _sha256_audio(watermarked, sr)
 
     # Record before returning bytes — if recording fails (e.g., uniqueness
@@ -133,26 +278,28 @@ async def embed_endpoint(
             freq_hi_hz=params.freq_hi_hz,
             pn_length=_PN_LENGTH,
             detection_threshold=params.detection_threshold,
+            is_stereo=is_stereo,
         )
     except Exception as e:
         # SQLite uniqueness violation, etc.
         raise HTTPException(409, f"Could not record watermark: {e}")
 
-    # Write WAV to memory and stream back.
-    buf = io.BytesIO()
-    sf.write(buf, watermarked, sr, format="WAV", subtype="FLOAT")
+    out_bytes, mime = _encode_audio(watermarked, sr, fmt)
+    buf = io.BytesIO(out_bytes)
     buf.seek(0)
 
     return StreamingResponse(
         buf,
-        media_type="audio/wav",
+        media_type=mime,
         headers={
             "X-Wallet-Fingerprint": wallet_fingerprint(wallet_id),
             "X-Release-Id": release_id,
             "X-Master-Sha256": master_hash,
             "X-Derivative-Sha256": derivative_hash,
             "X-Alpha": str(params.alpha),
-            "Content-Disposition": f'attachment; filename="{release_id}-{wallet_fingerprint(wallet_id)}.wav"',
+            "X-Format": fmt,
+            "X-Is-Stereo": "1" if is_stereo else "0",
+            "Content-Disposition": f'attachment; filename="{release_id}-{wallet_fingerprint(wallet_id)}.{fmt}"',
         },
     )
 
@@ -168,7 +315,9 @@ async def detect_endpoint(
 ) -> dict:
     """Detect which wallet a suspected leak belongs to."""
     blob = await audio.read()
-    samples, sr = _load_wav(blob)
+    samples, sr, fmt, is_stereo = _load_audio(
+        blob, audio.content_type, audio.filename
+    )
 
     if release_id:
         wallets = _store.wallets_for_release(release_id)
@@ -187,7 +336,11 @@ async def detect_endpoint(
 
     params = WatermarkParams(sample_rate=sr)
     candidates = ((w, derive_pn_sequence(w, _SECRET, length=_PN_LENGTH)) for w in wallets)
-    result = detect(samples, candidates, params)
+    if is_stereo and samples.ndim == 2:
+        result = detect_stereo(samples, candidates, params)
+    else:
+        mono = samples if samples.ndim == 1 else samples.mean(axis=1).astype(np.float32)
+        result = detect(mono, candidates, params)
 
     return {
         "matched": result.matched,

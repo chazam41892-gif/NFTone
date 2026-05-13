@@ -4,3 +4,7 @@ soundfile>=0.12
 fastapi>=0.110
 uvicorn[standard]>=0.27
 python-multipart>=0.0.9
+pydub>=0.25
+audioop-lts>=0.2; python_version >= "3.13"
+# Note: pydub requires ffmpeg at runtime. Dockerfile installs it via apt.
+# On Python 3.13+ pydub also needs audioop-lts (stdlib `audioop` was removed).

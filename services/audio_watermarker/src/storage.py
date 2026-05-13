@@ -59,6 +59,7 @@ class WatermarkRecord:
     pn_length: int
     detection_threshold: float
     created_at: str
+    is_stereo: int = 0
 
 
 class WatermarkStore:
@@ -67,6 +68,13 @@ class WatermarkStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._cursor() as cur:
             cur.executescript(SCHEMA)
+            # Additive migration: add `is_stereo` column to legacy DBs.
+            cur.execute("PRAGMA table_info(watermark_records)")
+            cols = {row["name"] for row in cur.fetchall()}
+            if "is_stereo" not in cols:
+                cur.execute(
+                    "ALTER TABLE watermark_records ADD COLUMN is_stereo INTEGER NOT NULL DEFAULT 0"
+                )
 
     @contextmanager
     def _cursor(self) -> Iterator[sqlite3.Cursor]:
@@ -91,6 +99,7 @@ class WatermarkStore:
         freq_hi_hz: float,
         pn_length: int,
         detection_threshold: float,
+        is_stereo: bool = False,
     ) -> int:
         """Insert a record. Returns row id. Raises if (release_id, wallet_id) already exists."""
         ts = datetime.now(timezone.utc).isoformat()
@@ -100,8 +109,8 @@ class WatermarkStore:
                 INSERT INTO watermark_records
                   (release_id, wallet_id, master_sha256, derivative_sha256,
                    alpha, sample_rate, freq_lo_hz, freq_hi_hz, pn_length,
-                   detection_threshold, created_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                   detection_threshold, created_at, is_stereo)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                 """,
                 (
                     release_id,
@@ -115,6 +124,7 @@ class WatermarkStore:
                     pn_length,
                     detection_threshold,
                     ts,
+                    1 if is_stereo else 0,
                 ),
             )
             return int(cur.lastrowid or 0)

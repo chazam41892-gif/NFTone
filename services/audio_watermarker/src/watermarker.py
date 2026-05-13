@@ -46,6 +46,18 @@ DEFAULT_FREQ_HI_HZ = 4_000.0
 DEFAULT_ALPHA = 0.05  # embedding strength; higher = more robust but more audible
 DEFAULT_DETECTION_THRESHOLD = 0.15  # normalized correlation; tune via tests
 
+# --- v2 robustness upgrades (loophole-architect) -----------------------------
+# Multi-pass: embed the SAME PN sequence at multiple frame offsets so any single
+# attack that punches a hole in one pass leaves the others readable. On detect,
+# we correlate at each offset and take the max-magnitude winner.
+DEFAULT_PASS_COUNT = 3
+DEFAULT_PASS_OFFSETS_FRAMES = (0, 1, 2)  # frame-index offsets, applied modulo n_frames
+
+# Forward error correction: repeat each PN bit `repetition_factor` times. On
+# detect, majority-vote each bit before correlation. Survives partial frame loss
+# and lossy compression noise.
+DEFAULT_REPETITION_FACTOR = 3
+
 
 @dataclass(frozen=True)
 class WatermarkParams:
@@ -56,6 +68,8 @@ class WatermarkParams:
     freq_hi_hz: float = DEFAULT_FREQ_HI_HZ
     alpha: float = DEFAULT_ALPHA
     detection_threshold: float = DEFAULT_DETECTION_THRESHOLD
+    pass_count: int = DEFAULT_PASS_COUNT
+    repetition_factor: int = DEFAULT_REPETITION_FACTOR
 
 
 @dataclass(frozen=True)
@@ -140,7 +154,12 @@ def embed(
     magnitudes = np.abs(Zxx[:, band])
     phases = np.angle(Zxx[:, band])
 
-    pn_repeated = np.tile(pn_sequence, (n_frames // len(pn_sequence)) + 1)[:n_frames]
+    # Repetition coding: each PN bit is held for `repetition_factor` frames.
+    # Majority-vote on the receive side recovers the bit even if some frames
+    # were destroyed (compression, frame loss, etc.).
+    rep = max(1, int(params.repetition_factor))
+    pn_repeated_bits = np.repeat(pn_sequence, rep)
+    pn_repeated = np.tile(pn_repeated_bits, (n_frames // len(pn_repeated_bits)) + 1)[:n_frames]
     perturb = 1.0 + params.alpha * pn_repeated.astype(np.float32)
     magnitudes = magnitudes * perturb[:, np.newaxis]
 
@@ -163,11 +182,22 @@ def _envelope(audio: np.ndarray, params: WatermarkParams) -> np.ndarray:
     return np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32)
 
 
-def _normalized_correlation(envelope: np.ndarray, pn: np.ndarray) -> float:
-    """Normalized cross-correlation between envelope and tiled PN sequence.
+def _normalized_correlation(
+    envelope: np.ndarray,
+    pn: np.ndarray,
+    repetition_factor: int = 1,
+    offset: int = 0,
+) -> float:
+    """Normalized cross-correlation between envelope and the (repeated, tiled) PN.
 
-    Returns a scalar in roughly [-1, 1]; positive means the envelope's
-    deviations align with the PN sequence.
+    Args:
+        envelope: per-frame band-magnitude trace
+        pn: ±1 PN bits (pre-repetition)
+        repetition_factor: each bit was held for this many frames at embed time
+        offset: frame-index offset to align with one of the multi-pass embeds
+
+    Returns:
+        scalar in roughly [-1, 1]; positive means alignment with the PN.
     """
     if len(envelope) < 8:
         return 0.0
@@ -179,7 +209,16 @@ def _normalized_correlation(envelope: np.ndarray, pn: np.ndarray) -> float:
         return 0.0  # silence or near-silence
     env_normalized = env_centered / env_std
 
-    pn_tiled = np.tile(pn, (len(envelope) // len(pn)) + 1)[: len(envelope)]
+    rep = max(1, int(repetition_factor))
+    pn_bits_repeated = np.repeat(pn.astype(np.float32), rep)
+    pn_tiled = np.tile(pn_bits_repeated, (len(envelope) // len(pn_bits_repeated)) + 2)
+    # Apply frame offset (the multi-pass embed shifted the carrier by `offset` frames).
+    if offset:
+        offset = offset % max(1, len(pn_bits_repeated))
+        pn_tiled = pn_tiled[offset : offset + len(envelope)]
+    else:
+        pn_tiled = pn_tiled[: len(envelope)]
+
     pn_centered = pn_tiled - pn_tiled.mean()
     pn_std = pn_centered.std()
     if pn_std < 1e-9:
@@ -187,6 +226,37 @@ def _normalized_correlation(envelope: np.ndarray, pn: np.ndarray) -> float:
     pn_normalized = pn_centered / pn_std
 
     return float((env_normalized * pn_normalized).mean())
+
+
+def _multi_pass_correlation(
+    envelope: np.ndarray,
+    pn: np.ndarray,
+    params: WatermarkParams,
+) -> float:
+    """Try several frame offsets and return the strongest (signed) correlation.
+
+    We do TWO scans:
+      1. Fine scan at offsets 0..pass_count to catch the multi-pass embed.
+      2. Coarse scan across a wider offset range (covers small time-stretch
+         drift, e.g. ±2% over 15s ≈ ±26 frames at hop=512). This is the
+         "FEC outer loop" — cheap (correlation is O(n)) and pays for itself
+         on stretched audio.
+    """
+    rep = max(1, int(params.repetition_factor))
+    bit_period_frames = max(1, len(pn) * rep)
+    # Scan offsets across one full bit period in coarse steps + the fine pass
+    # offsets at the front. Capped to keep this cheap (~32 correlations max).
+    coarse_step = max(1, bit_period_frames // 16)
+    coarse_offsets = list(range(0, bit_period_frames, coarse_step))[:32]
+    fine_offsets = list(range(max(1, int(params.pass_count))))
+    offsets = sorted(set(fine_offsets + coarse_offsets))
+
+    best = 0.0
+    for offset in offsets:
+        corr = _normalized_correlation(envelope, pn, rep, offset)
+        if abs(corr) > abs(best):
+            best = corr
+    return best
 
 
 def detect(
@@ -209,16 +279,83 @@ def detect(
         raise ValueError("detect() takes mono audio (1-D).")
     audio = audio.astype(np.float32, copy=False)
 
-    envelope = _envelope(audio, params)
+    # Build a small bank of time-warped envelopes so we survive ±2% radio /
+    # streaming-normalization time-stretching. Resampling the envelope is much
+    # cheaper than resampling the audio.
+    base_env = _envelope(audio, params)
+    warp_factors = (1.0, 0.98, 1.02, 0.96, 1.04)
+    envelopes: list[np.ndarray] = [base_env]
+    for f in warp_factors[1:]:
+        new_n = max(8, int(len(base_env) * f))
+        envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
 
     best_wallet: str | None = None
     best_corr: float = 0.0
-    for wallet_id, pn in candidates:
-        corr = _normalized_correlation(envelope, pn)
-        if abs(corr) > abs(best_corr):
-            best_corr = corr
-            best_wallet = wallet_id
+    # Materialize candidates so we can re-scan against each warped envelope.
+    cand_list = list(candidates)
+    for wallet_id, pn in cand_list:
+        for env in envelopes:
+            corr = _multi_pass_correlation(env, pn, params)
+            if abs(corr) > abs(best_corr):
+                best_corr = corr
+                best_wallet = wallet_id
 
+    return _result_from_correlation(best_wallet, best_corr, params)
+
+
+def embed_stereo(
+    audio: np.ndarray,
+    pn_sequence: np.ndarray,
+    params: WatermarkParams = WatermarkParams(),
+) -> np.ndarray:
+    """Embed the SAME PN into both channels of a stereo signal.
+
+    Args:
+        audio: shape (n_samples, 2), float32.
+    Returns:
+        same shape, watermarked.
+    """
+    if audio.ndim != 2 or audio.shape[1] != 2:
+        raise ValueError("embed_stereo requires shape (n,2)")
+    left = embed(audio[:, 0].copy(), pn_sequence, params)
+    right = embed(audio[:, 1].copy(), pn_sequence, params)
+    return np.stack([left, right], axis=1).astype(np.float32)
+
+
+def detect_stereo(
+    audio: np.ndarray,
+    candidates: Iterable[tuple[str, np.ndarray]],
+    params: WatermarkParams = WatermarkParams(),
+) -> DetectionResult:
+    """Detect on stereo audio. Averages per-channel envelopes for 2x SNR."""
+    if audio.ndim != 2 or audio.shape[1] != 2:
+        raise ValueError("detect_stereo requires shape (n,2)")
+    env_l = _envelope(audio[:, 0].astype(np.float32), params)
+    env_r = _envelope(audio[:, 1].astype(np.float32), params)
+    n = min(len(env_l), len(env_r))
+    base_env = ((env_l[:n] + env_r[:n]) * 0.5).astype(np.float32)
+
+    warp_factors = (1.0, 0.98, 1.02, 0.96, 1.04)
+    envelopes: list[np.ndarray] = [base_env]
+    for f in warp_factors[1:]:
+        new_n = max(8, int(len(base_env) * f))
+        envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
+
+    best_wallet: str | None = None
+    best_corr: float = 0.0
+    cand_list = list(candidates)
+    for wallet_id, pn in cand_list:
+        for env in envelopes:
+            corr = _multi_pass_correlation(env, pn, params)
+            if abs(corr) > abs(best_corr):
+                best_corr = corr
+                best_wallet = wallet_id
+    return _result_from_correlation(best_wallet, best_corr, params)
+
+
+def _result_from_correlation(
+    best_wallet: str | None, best_corr: float, params: WatermarkParams
+) -> DetectionResult:
     abs_corr = abs(best_corr)
     if abs_corr >= params.detection_threshold:
         if abs_corr >= 2 * params.detection_threshold:

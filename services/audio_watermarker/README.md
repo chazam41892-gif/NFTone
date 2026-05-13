@@ -15,12 +15,18 @@ This is the first real backend service in the NFTones module. Everything else (r
 
 ## What this service IS NOT (be honest)
 
-- **Not unbreakable.** Aggressive low-pass under 1 kHz, time-stretching beyond ±2%, heavy denoising, and the analog hole (re-recording through speakers) can defeat the watermark. There is NO audio watermark that survives every attack. Set user expectations accordingly.
-- **Not video.** Audio only in v1. Video watermarking is a separate, harder problem and lives in its own service when we build it.
-- **Not MP3-input-ready.** WAV in, WAV out, v1. Adding MP3/AAC input via ffmpeg + pydub is a v2 change (separate commit, separate test pass).
+- **Not unbreakable.** Aggressive low-pass under 1 kHz, time-stretching beyond ±4%, heavy denoising, and the analog hole (re-recording through speakers) can defeat the watermark. There is NO audio watermark that survives every attack. Set user expectations accordingly.
+- **Not video.** Audio only. Video watermarking is a separate, harder problem and lives in its own service (NFTube, future).
 - **Not authenticated.** This service trusts its caller. The $LVTN adapter (or any future caller) is responsible for auth at its edge. **Do not expose `:8500` to the open internet.**
 - **Not horizontally scalable yet.** SQLite + in-process detection is fine up to thousands of wallets. Beyond that, swap to Postgres + a worker queue (v3).
-- **Not stereo-preserving.** Stereo input is mixed to mono before embedding. v2 will preserve channels.
+
+## What this service NOW IS (v2 — audio PERFECTLY)
+
+- **Multi-format I/O.** WAV, MP3, AAC/M4A, FLAC — uploads and downloads. Powered by `pydub` + `ffmpeg` (Docker installs ffmpeg in the runtime). Output format = upload format.
+- **Stereo-preserving.** Stereo input is embedded into BOTH channels with the same PN sequence (synchronized payload). On detect, both channel envelopes are averaged → ~2x SNR boost.
+- **Multi-pass embed (loophole upgrade).** Multiple frame offsets carry the same PN so a single-attack hole leaves other passes readable. Default `pass_count=3`.
+- **Forward error correction.** Each PN bit is held for `repetition_factor=3` frames; majority-vote on detect. Survives partial frame loss from lossy compression.
+- **Time-warp tolerance.** Detect runs a small bank of resampled envelopes (±2%, ±4%) so ±2% radio/streaming normalization doesn't shift the PN out of phase.
 
 ## Endpoints
 
@@ -105,6 +111,25 @@ Run `pytest -v` to see all of these:
 - **`test_watermarker.py::test_threshold_blocks_random_audio`** — pure noise doesn't false-match
 
 Plus `test_known_limit_aggressive_lowpass` — marked `xfail`, documents that severe low-pass DOES defeat the watermark. Honesty in code.
+
+### Attack survival matrix (v2)
+
+Measured on `medium_realistic_music` (15s multi-harmonic + drums + reverb @ 44.1 kHz). Each row is a test in `tests/test_attacks.py`. All pass at default params (alpha=0.05, threshold=0.15, pass_count=3, repetition_factor=3).
+
+| Attack | Result | Notes |
+|---|---|---|
+| MP3 128 kbps roundtrip | PASS | Mid-band magnitudes preserved by codec |
+| MP3 320 kbps roundtrip | PASS | — |
+| AAC 128 kbps roundtrip | PASS | Via ffmpeg `ipod` (mp4/aac) muxer |
+| Stereo embed + detect | PASS | Same PN both channels; envelopes averaged |
+| Time-stretch +2% | PASS | Detector resampling bank ±2%, ±4% |
+| Time-stretch −2% | PASS | — |
+| Bandpass 500–6000 Hz (phone speaker) | PASS | Mid-band carrier inside passband |
+| Volume halving | PASS | Normalized correlation is amplitude-invariant |
+| Additive white noise −30 dB | PASS | — |
+| Aggressive lowpass <500 Hz | **XFAIL (known)** | Strips the mid-band carrier; physical limit |
+| Pure noise input | PASS (no-match) | No false positives |
+| Realistic-music false-positive | PASS (no-match) | Un-watermarked music doesn't match anyone |
 
 ## Integration into the $LVTN platform (the adapter, separate repo)
 
