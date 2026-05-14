@@ -43,6 +43,12 @@ DEFAULT_FRAME_SIZE = 2048  # FFT window (~46ms @ 44.1kHz)
 DEFAULT_HOP_SIZE = 512  # 4x overlap
 DEFAULT_FREQ_LO_HZ = 1_000.0
 DEFAULT_FREQ_HI_HZ = 4_000.0
+# Redundant low-band carrier (v3): survives aggressive lowpass attacks that
+# strip the mid-band. Centered well below 500 Hz so an 8th-order Butterworth
+# lowpass at 500 Hz (the canonical "kill the watermark" attack) only attenuates
+# the band edge by a few dB.
+DEFAULT_FREQ_LO2_HZ = 100.0
+DEFAULT_FREQ_HI2_HZ = 450.0
 DEFAULT_ALPHA = 0.05  # embedding strength; higher = more robust but more audible
 DEFAULT_DETECTION_THRESHOLD = 0.15  # normalized correlation; tune via tests
 
@@ -66,6 +72,9 @@ class WatermarkParams:
     hop_size: int = DEFAULT_HOP_SIZE
     freq_lo_hz: float = DEFAULT_FREQ_LO_HZ
     freq_hi_hz: float = DEFAULT_FREQ_HI_HZ
+    # Second (redundant) low-band carrier. Set freq_lo2_hz == freq_hi2_hz to disable.
+    freq_lo2_hz: float = DEFAULT_FREQ_LO2_HZ
+    freq_hi2_hz: float = DEFAULT_FREQ_HI2_HZ
     alpha: float = DEFAULT_ALPHA
     detection_threshold: float = DEFAULT_DETECTION_THRESHOLD
     pass_count: int = DEFAULT_PASS_COUNT
@@ -111,10 +120,24 @@ def _istft(Zxx: np.ndarray, params: WatermarkParams, length: int) -> np.ndarray:
 
 
 def _band_indices(n_bins: int, params: WatermarkParams) -> np.ndarray:
-    """Indices of FFT bins inside [freq_lo, freq_hi]."""
+    """Indices of FFT bins inside the primary (mid) band [freq_lo, freq_hi]."""
     freqs = np.linspace(0, params.sample_rate / 2, n_bins)
     return np.where(
         (freqs >= params.freq_lo_hz) & (freqs <= params.freq_hi_hz)
+    )[0]
+
+
+def _band_indices_low(n_bins: int, params: WatermarkParams) -> np.ndarray:
+    """Indices of FFT bins inside the secondary (low) band [freq_lo2, freq_hi2].
+
+    Returns an empty array if the low band is disabled (lo2 == hi2). The empty
+    array is a sentinel — callers must handle the no-low-band case gracefully.
+    """
+    if params.freq_lo2_hz >= params.freq_hi2_hz:
+        return np.empty(0, dtype=np.int64)
+    freqs = np.linspace(0, params.sample_rate / 2, n_bins)
+    return np.where(
+        (freqs >= params.freq_lo2_hz) & (freqs <= params.freq_hi2_hz)
     )[0]
 
 
@@ -149,11 +172,6 @@ def embed(
             f"at sample_rate={params.sample_rate}; check parameters."
         )
 
-    # For each frame, perturb the band's magnitudes by alpha * pn[frame % len(pn)]
-    # The phase is left alone — only magnitudes carry the payload.
-    magnitudes = np.abs(Zxx[:, band])
-    phases = np.angle(Zxx[:, band])
-
     # Repetition coding: each PN bit is held for `repetition_factor` frames.
     # Majority-vote on the receive side recovers the bit even if some frames
     # were destroyed (compression, frame loss, etc.).
@@ -161,9 +179,23 @@ def embed(
     pn_repeated_bits = np.repeat(pn_sequence, rep)
     pn_repeated = np.tile(pn_repeated_bits, (n_frames // len(pn_repeated_bits)) + 1)[:n_frames]
     perturb = 1.0 + params.alpha * pn_repeated.astype(np.float32)
-    magnitudes = magnitudes * perturb[:, np.newaxis]
 
+    # Primary mid-band carrier — survives lossy compression and time-warping.
+    magnitudes = np.abs(Zxx[:, band])
+    phases = np.angle(Zxx[:, band])
+    magnitudes = magnitudes * perturb[:, np.newaxis]
     Zxx[:, band] = magnitudes * np.exp(1j * phases)
+
+    # Secondary low-band carrier — survives aggressive lowpass attacks (e.g.,
+    # an 8th-order Butterworth at 500 Hz) that would strip the mid-band.
+    # Same PN sequence, same repetition, so the detector can correlate against
+    # either band's envelope. Whichever survives the attack wins.
+    band_lo = _band_indices_low(n_bins, params)
+    if band_lo.size > 0:
+        mag_lo = np.abs(Zxx[:, band_lo])
+        phase_lo = np.angle(Zxx[:, band_lo])
+        mag_lo = mag_lo * perturb[:, np.newaxis]
+        Zxx[:, band_lo] = mag_lo * np.exp(1j * phase_lo)
 
     watermarked = _istft(Zxx, params, original_length)
     # Clip to legal range — guard against overshoot from the perturbation.
@@ -172,14 +204,39 @@ def embed(
 
 
 def _envelope(audio: np.ndarray, params: WatermarkParams) -> np.ndarray:
-    """Mid-frequency magnitude envelope, per frame. Shape (n_frames,)."""
+    """Mid-frequency (primary band) magnitude envelope, per frame.
+
+    Kept as a single-band convenience for legacy callers / tests. New detection
+    code should use `_envelopes` which returns one envelope per active band.
+    """
     Zxx = _stft(audio, params)
     n_bins = Zxx.shape[1]
     band = _band_indices(n_bins, params)
     if band.size == 0:
         return np.zeros(Zxx.shape[0], dtype=np.float32)
-    # Mean magnitude across the band, per frame.
     return np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32)
+
+
+def _envelopes(audio: np.ndarray, params: WatermarkParams) -> list[np.ndarray]:
+    """All per-frame band envelopes (mid first, low second if enabled).
+
+    Multi-band detection: the same PN is embedded in both bands, so the
+    detector tries each envelope and takes the strongest correlation. This is
+    how the watermark survives aggressive lowpass — the mid-band envelope is
+    flat after the attack, but the low-band envelope still carries the PN.
+    """
+    Zxx = _stft(audio, params)
+    n_bins = Zxx.shape[1]
+    out: list[np.ndarray] = []
+    band = _band_indices(n_bins, params)
+    if band.size > 0:
+        out.append(np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32))
+    band_lo = _band_indices_low(n_bins, params)
+    if band_lo.size > 0:
+        out.append(np.abs(Zxx[:, band_lo]).mean(axis=1).astype(np.float32))
+    if not out:
+        out.append(np.zeros(Zxx.shape[0], dtype=np.float32))
+    return out
 
 
 def _normalized_correlation(
@@ -279,15 +336,17 @@ def detect(
         raise ValueError("detect() takes mono audio (1-D).")
     audio = audio.astype(np.float32, copy=False)
 
-    # Build a small bank of time-warped envelopes so we survive ±2% radio /
-    # streaming-normalization time-stretching. Resampling the envelope is much
-    # cheaper than resampling the audio.
-    base_env = _envelope(audio, params)
+    # Build per-band envelopes, then a small bank of time-warped versions of
+    # each, so we survive ±2% radio / streaming-normalization time-stretching.
+    # Resampling the envelope is much cheaper than resampling the audio.
+    base_envs = _envelopes(audio, params)
     warp_factors = (1.0, 0.98, 1.02, 0.96, 1.04)
-    envelopes: list[np.ndarray] = [base_env]
-    for f in warp_factors[1:]:
-        new_n = max(8, int(len(base_env) * f))
-        envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
+    envelopes: list[np.ndarray] = []
+    for base_env in base_envs:
+        envelopes.append(base_env)
+        for f in warp_factors[1:]:
+            new_n = max(8, int(len(base_env) * f))
+            envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
 
     best_wallet: str | None = None
     best_corr: float = 0.0
@@ -327,19 +386,30 @@ def detect_stereo(
     candidates: Iterable[tuple[str, np.ndarray]],
     params: WatermarkParams = WatermarkParams(),
 ) -> DetectionResult:
-    """Detect on stereo audio. Averages per-channel envelopes for 2x SNR."""
+    """Detect on stereo audio. Averages per-channel envelopes for 2x SNR.
+
+    Multi-band aware: averages each band's per-channel envelopes separately,
+    so the low band can win on its own when an aggressive lowpass strips the
+    mid band.
+    """
     if audio.ndim != 2 or audio.shape[1] != 2:
         raise ValueError("detect_stereo requires shape (n,2)")
-    env_l = _envelope(audio[:, 0].astype(np.float32), params)
-    env_r = _envelope(audio[:, 1].astype(np.float32), params)
-    n = min(len(env_l), len(env_r))
-    base_env = ((env_l[:n] + env_r[:n]) * 0.5).astype(np.float32)
+    envs_l = _envelopes(audio[:, 0].astype(np.float32), params)
+    envs_r = _envelopes(audio[:, 1].astype(np.float32), params)
+    # Pair-wise average per band (lengths match because both channels share
+    # the same STFT geometry).
+    base_envs: list[np.ndarray] = []
+    for el, er in zip(envs_l, envs_r):
+        n = min(len(el), len(er))
+        base_envs.append(((el[:n] + er[:n]) * 0.5).astype(np.float32))
 
     warp_factors = (1.0, 0.98, 1.02, 0.96, 1.04)
-    envelopes: list[np.ndarray] = [base_env]
-    for f in warp_factors[1:]:
-        new_n = max(8, int(len(base_env) * f))
-        envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
+    envelopes: list[np.ndarray] = []
+    for base_env in base_envs:
+        envelopes.append(base_env)
+        for f in warp_factors[1:]:
+            new_n = max(8, int(len(base_env) * f))
+            envelopes.append(signal.resample(base_env, new_n).astype(np.float32))
 
     best_wallet: str | None = None
     best_corr: float = 0.0

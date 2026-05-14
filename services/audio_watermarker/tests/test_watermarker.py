@@ -165,17 +165,14 @@ def test_threshold_blocks_random_audio(medium_audio, secret_key):
     )
 
 
-# ------------------------- known-limitation tests ---------------------------
-# These DOCUMENT what the watermark CAN'T do. They are skipped (xfail) so the
-# build stays green but the documentation lives in code. Honesty over false
-# claims.
+# ------------------------- aggressive-lowpass attack ------------------------
+# Was xfail in v2 (mid-band carrier alone). v3 added a redundant low-band
+# carrier (100-450 Hz) that survives an 8th-order Butterworth lowpass at
+# 500 Hz, so this is now a normal pass — keep it as a regression guard
+# against anyone disabling the low-band by mistake.
 
 
-@pytest.mark.xfail(
-    reason="Severe low-pass (<500 Hz) strips the mid-band carrier; this is a known limit, not a bug.",
-    strict=False,
-)
-def test_known_limit_aggressive_lowpass(medium_audio, secret_key):
+def test_survives_aggressive_lowpass(medium_audio, secret_key):
     from scipy.signal import butter, sosfilt
 
     pn_a = derive_pn_sequence("wallet-A", secret_key)
@@ -184,4 +181,8 @@ def test_known_limit_aggressive_lowpass(medium_audio, secret_key):
     attacked = sosfilt(sos, watermarked).astype(np.float32)
 
     result = detect(attacked, [("wallet-A", pn_a)])
-    assert result.wallet_id == "wallet-A"
+    assert result.wallet_id == "wallet-A", (
+        f"Watermark did not survive 500 Hz lowpass — low-band carrier may be "
+        f"disabled or misconfigured (got wallet_id={result.wallet_id}, "
+        f"corr={result.correlation})"
+    )

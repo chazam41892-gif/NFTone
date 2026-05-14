@@ -15,13 +15,14 @@ This is the first real backend service in the NFTones module. Everything else (r
 
 ## What this service IS NOT (be honest)
 
-- **Not unbreakable.** Aggressive low-pass under 1 kHz, time-stretching beyond ±4%, heavy denoising, and the analog hole (re-recording through speakers) can defeat the watermark. There is NO audio watermark that survives every attack. Set user expectations accordingly.
+- **Not unbreakable.** Sub-100 Hz lowpass (kills both carriers), time-stretching beyond ±4%, heavy denoising, and the analog hole (re-recording through speakers) can defeat the watermark. The classic ~500 Hz lowpass attack — which defeated v2 — is now survived via a redundant low-band carrier (see v3 note below). There is NO audio watermark that survives every attack. Set user expectations accordingly.
 - **Not video.** Audio only. Video watermarking is a separate, harder problem and lives in its own service (NFTube, future).
 - **Not authenticated.** This service trusts its caller. The $LVTN adapter (or any future caller) is responsible for auth at its edge. **Do not expose `:8500` to the open internet.**
 - **Not horizontally scalable yet.** SQLite + in-process detection is fine up to thousands of wallets. Beyond that, swap to Postgres + a worker queue (v3).
 
-## What this service NOW IS (v2 — audio PERFECTLY)
+## What this service NOW IS (v3 — multi-band redundancy)
 
+- **Multi-band redundant carrier (v3).** The SAME PN sequence is embedded in BOTH a mid-band carrier (1-4 kHz, the classic spread-spectrum sweet spot for lossy codecs) AND a low-band carrier (100-450 Hz, which sits inside the passband of an 8th-order Butterworth lowpass at 500 Hz). Different attacks kill different bands; whichever survives wins. The "aggressive 500 Hz lowpass" attack — formerly an `xfail` known-limit — is now defeated.
 - **Multi-format I/O.** WAV, MP3, AAC/M4A, FLAC — uploads and downloads. Powered by `pydub` + `ffmpeg` (Docker installs ffmpeg in the runtime). Output format = upload format.
 - **Stereo-preserving.** Stereo input is embedded into BOTH channels with the same PN sequence (synchronized payload). On detect, both channel envelopes are averaged → ~2x SNR boost.
 - **Multi-pass embed (loophole upgrade).** Multiple frame offsets carry the same PN so a single-attack hole leaves other passes readable. Default `pass_count=3`.
@@ -110,7 +111,7 @@ Run `pytest -v` to see all of these:
 - **`test_watermarker.py::test_survives_additive_noise`** — -30dB additive noise (typical re-encode artifact) doesn't defeat detection
 - **`test_watermarker.py::test_threshold_blocks_random_audio`** — pure noise doesn't false-match
 
-Plus `test_known_limit_aggressive_lowpass` — marked `xfail`, documents that severe low-pass DOES defeat the watermark. Honesty in code.
+Plus `test_survives_aggressive_lowpass` — proves the v3 low-band carrier (100-450 Hz) survives an 8th-order Butterworth lowpass at 500 Hz. Was `xfail` in v2 (mid-band only); now a normal passing test that gates against accidentally disabling the low band.
 
 ### Attack survival matrix (v2)
 
@@ -127,7 +128,7 @@ Measured on `medium_realistic_music` (15s multi-harmonic + drums + reverb @ 44.1
 | Bandpass 500–6000 Hz (phone speaker) | PASS | Mid-band carrier inside passband |
 | Volume halving | PASS | Normalized correlation is amplitude-invariant |
 | Additive white noise −30 dB | PASS | — |
-| Aggressive lowpass <500 Hz | **XFAIL (known)** | Strips the mid-band carrier; physical limit |
+| Aggressive lowpass <500 Hz (8th-order Butterworth) | PASS | v3 low-band carrier (100-450 Hz) sits inside the passband |
 | Pure noise input | PASS (no-match) | No false positives |
 | Realistic-music false-positive | PASS (no-match) | Un-watermarked music doesn't match anyone |
 
