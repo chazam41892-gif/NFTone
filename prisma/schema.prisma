@@ -1,0 +1,149 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Tier {
+  FREE
+  CREATOR
+  PRO
+  LABEL
+  ENTERPRISE
+}
+
+enum DropStatus {
+  DRAFT
+  PUBLISHED
+  MINTED
+  SOLD
+  FLAGGED
+  REMOVED
+}
+
+enum MintMode {
+  LAZY
+  ARTIST_PAID
+  FAN_SPONSORED
+  KTRS_CREDIT
+  PLATFORM_SPONSORED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String?   @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  wallet        String?   @unique
+  tier          Tier      @default(FREE)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  artistProfile ArtistProfile?
+  fanProfile    FanProfile?
+  ktrsCredits   KtrsCreditBalance?
+  drops         Drop[]
+}
+
+model ArtistProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  slug        String   @unique
+  name        String
+  bio         String?
+  imageUrl    String?
+  verified    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+  drops       Drop[]
+}
+
+model FanProfile {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  username  String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Drop {
+  id              String     @id @default(cuid())
+  userId          String
+  artistProfileId String
+  title           String
+  description     String?
+  audioUrl        String
+  coverArtUrl     String?
+  priceUsd        Float
+  priceKtrs       Float?
+  editionSize     Int?
+  status          DropStatus @default(DRAFT)
+  mintMode        MintMode   @default(LAZY)
+  mintedNftAddress String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user            User          @relation(fields: [userId], references: [id])
+  artistProfile   ArtistProfile @relation(fields: [artistProfileId], references: [id])
+  rights          RightsDeclaration?
+  purchases       Purchase[]
+}
+
+model RightsDeclaration {
+  id                 String   @id @default(cuid())
+  dropId             String   @unique
+  masterOwner        String
+  publishingOwner    String?
+  songwriterSplits   Json?
+  producerSplits     Json?
+  featuredSplits     Json?
+  sampleDisclosure   String?
+  commercialAllowed  Boolean  @default(false)
+  fanCollectibleOnly Boolean  @default(true)
+  exclusiveLicense   Boolean  @default(false)
+  attestation        Boolean  @default(false)
+  createdAt          DateTime @default(now())
+
+  drop Drop @relation(fields: [dropId], references: [id])
+}
+
+model KtrsCreditBalance {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Purchase {
+  id        String   @id @default(cuid())
+  dropId    String
+  buyerWallet String
+  amountUsd Float
+  amountKtrs Float?
+  txSignature String?
+  mintedNftAddress String?
+  createdAt DateTime @default(now())
+
+  drop Drop @relation(fields: [dropId], references: [id])
+}
+
+// Single-use nonce for wallet sign-in. Created per sign-in attempt, consumed on verify.
+model WalletNonce {
+  id        String   @id @default(cuid())
+  wallet    String
+  nonce     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([wallet])
+  @@index([expires])
+}

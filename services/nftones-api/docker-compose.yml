@@ -1,0 +1,27 @@
+services:
+  nftones_api:
+    build: .
+    container_name: nftones-api
+    ports:
+      # Localhost-only — expose via Caddy/nginx reverse proxy on Hetzner
+      # (TLS termination + auth headers happen there).
+      - "127.0.0.1:8600:8600"
+    volumes:
+      - nftones_api_data:/app/data
+      # Fixture is read-only at runtime. mount the frozen dataset:
+      - ../../mock-data:/app/mock-data:ro
+    environment:
+      NFTONES_API_LOG_LEVEL: ${NFTONES_API_LOG_LEVEL:-INFO}
+      NFTONES_API_CORS_ORIGINS: ${NFTONES_API_CORS_ORIGINS:-http://localhost:8000,http://127.0.0.1:8000,tauri://localhost}
+      NFTONES_WATERMARKER_URL: ${NFTONES_WATERMARKER_URL:-http://nftones-audio-watermarker:8500}
+      NFTONES_AUTH_ENABLED: ${NFTONES_AUTH_ENABLED:-false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8600/api/v1/health').status==200 else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  nftones_api_data:

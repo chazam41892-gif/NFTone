@@ -1,8 +1,19 @@
-// NFTones prototype — single-page app over mock data.
-// No build step. Reads window.NFTONES_MOCK injected by ../mock-data/data.js.
+// NFTones — single-page app.
+//
+// Data access goes through window.NFTONES_DATA_SOURCE (dataSource.js):
+//   - useApi:false (default) → reads window.NFTONES_MOCK (mock-data/data.js)
+//   - useApi:true            → fetches from nftones-api
+//
+// The local `D` cache below is a STABLE reference. In mock mode it starts as
+// window.NFTONES_MOCK so all existing sync mutation paths (revoke, new release)
+// continue to work unchanged. In API mode it starts as an empty shape, then
+// hydrateAll() populates it before the first render.
 
 (() => {
-  const D = window.NFTONES_MOCK;
+  const DS = window.NFTONES_DATA_SOURCE;
+  const D = DS.useApi
+    ? { wallets: [], releases: [], grants: [], scans: [], evidenceReports: [], tokenEvents: [], balances: {} }
+    : window.NFTONES_MOCK;
 
   // ------- helpers -------
   const $  = (sel, root = document) => root.querySelector(sel);
@@ -574,15 +585,30 @@
   }
 
   // ------- init -------
+  // Chrome that doesn't need data renders immediately.
   buildWaveform();
-  renderDashboard();
-  renderReleases();
-  renderAccess();
-  renderWatermarks();
-  renderEvidence();
-  renderToken();
   setupDropzone();
 
-  const v = (location.hash || "#dashboard").slice(1);
-  go(v);
+  // Hydrate D from the configured data source, then render every view.
+  // In mock mode this resolves synchronously and D was already populated
+  // at IIFE-top, so the demo is byte-identical to the pre-API behavior.
+  // In API mode this waits on the nftones-api fetches before the first paint.
+  DS.hydrateAll()
+    .then((fresh) => {
+      Object.assign(D, fresh);
+      renderDashboard();
+      renderReleases();
+      renderAccess();
+      renderWatermarks();
+      renderEvidence();
+      renderToken();
+      const v = (location.hash || "#dashboard").slice(1);
+      go(v);
+    })
+    .catch((e) => {
+      console.error("[NFTones] hydrate failed:", e);
+      // Fail visible — surface the error in the crumb so it's not silent.
+      const crumb = document.querySelector("#crumb");
+      if (crumb) crumb.textContent = "Data source unavailable — check console";
+    });
 })();

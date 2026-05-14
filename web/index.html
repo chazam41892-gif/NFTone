@@ -456,6 +456,17 @@
 </div>
 
 <script src="../mock-data/data.js"></script>
+<!-- NFTones runtime config. Demo default is mock-mode (useApi: false) so
+     this build behaves byte-identically to the pre-API release. Flip useApi
+     to true (and point apiBase at your deployed nftones-api) to read live
+     server data instead. -->
+<script>
+  window.NFTONES_CONFIG = {
+    useApi: false,
+    apiBase: "/api/v1",   // dev: "http://localhost:8600/api/v1"
+  };
+</script>
+<script src="./dataSource.js"></script>
 <script src="./app.js"></script>
 </body>
 </html>
