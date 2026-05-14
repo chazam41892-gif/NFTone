@@ -79,6 +79,7 @@ model Drop {
   title           String
   description     String?
   audioUrl        String
+  masterSha256    String?
   coverArtUrl     String?
   priceUsd        Float
   priceKtrs       Float?
@@ -123,17 +124,37 @@ model KtrsCreditBalance {
   user User @relation(fields: [userId], references: [id])
 }
 
+enum PurchaseStatus {
+  PENDING
+  PAID
+  WATERMARKED
+  MINTED
+  DELIVERED
+  REFUNDED
+  FAILED
+}
+
 model Purchase {
   id        String   @id @default(cuid())
   dropId    String
   buyerWallet String
   amountUsd Float
   amountKtrs Float?
+  status    PurchaseStatus @default(PENDING)
   txSignature String?
   mintedNftAddress String?
+  derivativeSha256 String?
+  watermarkedAudioUrl String?
+  walletFingerprint String?
+  failureReason String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   drop Drop @relation(fields: [dropId], references: [id])
+
+  @@index([dropId])
+  @@index([buyerWallet])
+  @@index([status])
 }
 
 // Single-use nonce for wallet sign-in. Created per sign-in attempt, consumed on verify.

@@ -3,7 +3,14 @@
     "allow": [
       "Bash(npx -y skills add supabase/agent-skills)",
       "Bash(npm --version)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Skill(7-sages)",
+      "Skill(7-sages:*)",
+      "Bash(git mv *)",
+      "Bash(python -m venv .venv)",
+      "Bash(.venv/Scripts/python.exe -m pip install --quiet -r requirements-dev.txt)",
+      "Bash(.venv/Scripts/python.exe -m pytest -q)",
+      "Bash(.venv/Scripts/python.exe -m pip install --timeout 60 -r requirements-dev.txt)"
     ]
   }
 }
