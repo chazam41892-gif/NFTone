@@ -1,0 +1,44 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install dependencies",
+      "type": "shell",
+      "command": "npm install",
+      "inAgents": true,
+      "runOptions": {
+        "runOn": "worktreeCreated"
+      }
+    },
+    {
+      "label": "Dev server",
+      "type": "shell",
+      "command": "npm run dev",
+      "inAgents": true
+    },
+    {
+      "label": "Build",
+      "type": "shell",
+      "command": "npm run build",
+      "inAgents": true
+    },
+    {
+      "label": "Typecheck",
+      "type": "shell",
+      "command": "npm run typecheck",
+      "inAgents": true
+    },
+    {
+      "label": "Prisma: Generate",
+      "type": "shell",
+      "command": "npm run prisma:generate",
+      "inAgents": true
+    },
+    {
+      "label": "Prisma: Migrate",
+      "type": "shell",
+      "command": "npm run prisma:migrate",
+      "inAgents": true
+    }
+  ]
+}
