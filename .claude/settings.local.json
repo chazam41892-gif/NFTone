@@ -12,5 +12,8 @@
       "Bash(.venv/Scripts/python.exe -m pytest -q)",
       "Bash(.venv/Scripts/python.exe -m pip install --timeout 60 -r requirements-dev.txt)"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [
+    "supabase"
+  ]
 }
