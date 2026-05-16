@@ -1,19 +1,23 @@
-import { createClient } from "@supabase/supabase-js";
+import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const BUCKET = "nftones";
 
-if (typeof window === "undefined" && (!supabaseUrl || !supabaseServiceKey)) {
-  console.warn(
-    "[storage] Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY. Uploads will fail until set."
-  );
+let _admin: SupabaseClient | null = null;
+function getAdmin(): SupabaseClient {
+  if (_admin) return _admin;
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error(
+      "Storage unavailable: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY."
+    );
+  }
+  _admin = createClient(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  return _admin;
 }
-
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
-  auth: { persistSession: false, autoRefreshToken: false },
-});
 
 function safeExt(name: string, fallback: string): string {
   const ext = name.split(".").pop()?.toLowerCase();
@@ -27,7 +31,7 @@ export async function uploadAudio(file: File, userId: string): Promise<string> {
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await supabaseAdmin.storage
+  const { error } = await getAdmin().storage
     .from(BUCKET)
     .upload(path, buffer, {
       contentType: file.type,
@@ -36,7 +40,7 @@ export async function uploadAudio(file: File, userId: string): Promise<string> {
 
   if (error) throw new Error(`Audio upload failed: ${error.message}`);
 
-  const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = getAdmin().storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -46,7 +50,7 @@ export async function uploadCoverArt(file: File, userId: string): Promise<string
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const { error } = await supabaseAdmin.storage
+  const { error } = await getAdmin().storage
     .from(BUCKET)
     .upload(path, buffer, {
       contentType: file.type,
@@ -55,7 +59,7 @@ export async function uploadCoverArt(file: File, userId: string): Promise<string
 
   if (error) throw new Error(`Cover art upload failed: ${error.message}`);
 
-  const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = getAdmin().storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
 
@@ -91,7 +95,7 @@ export async function uploadWatermarkedAudio(
   const ext = extFromMime[contentType] || "wav";
   const path = `watermarked/${dropId}/${purchaseId}.${ext}`;
 
-  const { error } = await supabaseAdmin.storage
+  const { error } = await getAdmin().storage
     .from(BUCKET)
     .upload(path, buffer, {
       contentType,
@@ -100,6 +104,6 @@ export async function uploadWatermarkedAudio(
 
   if (error) throw new Error(`Watermarked upload failed: ${error.message}`);
 
-  const { data } = supabaseAdmin.storage.from(BUCKET).getPublicUrl(path);
+  const { data } = getAdmin().storage.from(BUCKET).getPublicUrl(path);
   return data.publicUrl;
 }
