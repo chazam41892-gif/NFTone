@@ -26,3 +26,4 @@ services/nftones-api/data/
 
 # Claude Code local state
 .claude/scheduled_tasks.lock
+.claude/settings.json
