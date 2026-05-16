@@ -51,6 +51,7 @@ pub fn run() {
             commands::watermarker_embed,
             commands::watermarker_detect,
             commands::check_for_updates,
+            commands::updater_install,
         ])
         .build(tauri::generate_context!())
         .expect("error while building NFTones desktop");

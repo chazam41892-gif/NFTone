@@ -89,22 +89,21 @@ fn uuid_v4() -> String {
     format!("{:032x}", n)
 }
 
-// ---------- Session storage (real impl lands in Commit 3 via `keyring`) ----------
+// ---------- Session storage (OS keychain via crate::session) ----------
 
 #[tauri::command]
-pub async fn session_set(_key: String, _value: String) -> AppResult<()> {
-    // Keyring impl: Commit 3.
-    Ok(())
+pub async fn session_set(key: String, value: String) -> AppResult<()> {
+    crate::session::set(&key, &value)
 }
 
 #[tauri::command]
-pub async fn session_get(_key: String) -> AppResult<Option<String>> {
-    Ok(None)
+pub async fn session_get(key: String) -> AppResult<Option<String>> {
+    crate::session::get(&key)
 }
 
 #[tauri::command]
-pub async fn session_clear(_key: String) -> AppResult<()> {
-    Ok(())
+pub async fn session_clear(key: String) -> AppResult<()> {
+    crate::session::clear(&key)
 }
 
 // ---------- Watermarker (talks to bundled sidecar on 127.0.0.1:8501) ----------
@@ -307,9 +306,48 @@ fn chrono_unix_ts() -> u64 {
         .unwrap_or(0)
 }
 
-// ---------- Updater (real impl lands in Commit 3) ----------
+// ---------- Updater (tauri-plugin-updater) ----------
 
+/// Check the updater endpoint configured in tauri.conf.json.
+/// Frontend can then choose to call `updater_install` to apply.
 #[tauri::command]
-pub async fn check_for_updates(_app: AppHandle) -> AppResult<serde_json::Value> {
-    Ok(serde_json::json!({"available": false, "note": "updater wired in Commit 3"}))
+pub async fn check_for_updates(app: AppHandle) -> AppResult<serde_json::Value> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app
+        .updater()
+        .map_err(|e| AppError::Other(format!("updater init: {e}")))?;
+    match updater.check().await {
+        Ok(Some(update)) => Ok(serde_json::json!({
+            "available": true,
+            "version": update.version,
+            "current_version": update.current_version,
+            "date": update.date.map(|d| d.to_string()),
+            "body": update.body,
+        })),
+        Ok(None) => Ok(serde_json::json!({"available": false})),
+        Err(e) => Ok(serde_json::json!({"available": false, "error": e.to_string()})),
+    }
+}
+
+/// Download + install the available update, then exit so the new version
+/// launches on next start. The frontend should warn the user before calling.
+#[tauri::command]
+pub async fn updater_install(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_updater::UpdaterExt;
+    let updater = app
+        .updater()
+        .map_err(|e| AppError::Other(format!("updater init: {e}")))?;
+    let Some(update) = updater
+        .check()
+        .await
+        .map_err(|e| AppError::Other(format!("updater check: {e}")))?
+    else {
+        return Err(AppError::Other("no update available".into()));
+    };
+    update
+        .download_and_install(|_chunk_len, _total| {}, || {})
+        .await
+        .map_err(|e| AppError::Other(format!("install failed: {e}")))?;
+    app.exit(0);
+    Ok(())
 }
