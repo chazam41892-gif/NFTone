@@ -25,7 +25,7 @@ log = logging.getLogger(__name__)
 _FIXTURE_PATH = Path(
     os.environ.get(
         "NFTONES_API_FIXTURE",
-        str(Path(__file__).resolve().parents[2] / "mock-data" / "data.json"),
+        str(Path(__file__).resolve().parents[3] / "mock-data" / "data.json"),
     )
 )
 
