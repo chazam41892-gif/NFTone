@@ -143,6 +143,14 @@ jobs:
         with:
           path: dist
 
+      - name: Setup Python (for latest.json merge)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Merge per-platform latest.json manifests
+        run: python .github/workflows/merge-latest-json.py dist
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -156,4 +164,4 @@ jobs:
             dist/**/*.dmg
             dist/**/*.deb
             dist/**/*.AppImage
-            dist/**/latest.json
+            dist/latest.json

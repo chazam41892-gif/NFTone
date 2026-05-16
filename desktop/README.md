@@ -110,11 +110,24 @@ This commit set ships the **wiring** but not the binary. Building it:
 
 ```powershell
 cd services\audio_watermarker
+python -m venv .venv
 .\.venv\Scripts\activate
+pip install -r requirements.txt
 pip install pyinstaller
-pyinstaller --onefile -n audio_watermarker src/api_runner.py   # (script TBD)
-# Copy dist\audio_watermarker.exe to desktop\src-tauri\binaries\audio_watermarker-x86_64-pc-windows-msvc.exe
+python build_sidecar.py
 ```
+
+`build_sidecar.py` detects the host's Rust target triple via `rustc
+--version --verbose`, runs `pyinstaller audio_watermarker.spec`, and
+copies the result to `desktop/src-tauri/binaries/audio_watermarker-<triple>.exe`
+(or no `.exe` on macOS/Linux). The spec file pins the hidden imports
+uvicorn needs at runtime and bundles numpy + soundfile data files. UPX
+is disabled deliberately — it trips Windows SmartScreen and AV scanners.
+
+WAV-only at v0.1.0. The pydub→ffmpeg path for mp3/m4a/flac is wired but
+not bundled (ffmpeg can't be embedded in a single-file pyinstaller
+bundle without significant per-platform work). The FastAPI service
+returns HTTP 415 for those formats if pydub is unavailable.
 
 Then, to wire the binary into the bundle, add this back into
 `tauri.conf.json` under `bundle`:
@@ -130,7 +143,8 @@ before anyone produces the binary.)
 When the binary is missing OR not declared in `externalBin`, `sidecar.rs`
 logs a warning and the shell runs without it. `watermarker_health`
 returns `false`; the frontend can fall back to a cloud-hosted
-watermarker URL.
+watermarker URL (the same `/api/v1/*` endpoints behind your $LVTN
+adapter).
 
 ## Deep-link wallet sign-in flow
 

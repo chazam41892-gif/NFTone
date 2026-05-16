@@ -104,6 +104,62 @@ Output:
 > losing the privkey means you can never ship another auto-update under
 > the same pubkey.
 
+### Where `latest.json` is hosted
+
+Default endpoint (configured in `tauri.conf.json`):
+
+```text
+https://github.com/chazam41892-gif/NFTone/releases/latest/download/latest.json
+```
+
+This is GitHub Releases' permalink — the file from whichever release is
+flagged "latest" in the repo. Two niceties:
+
+1. **No separate hosting cost.** The release workflow already publishes
+   the per-platform installers as release assets; we just include the
+   merged `latest.json` alongside them.
+2. **Atomic switchover.** Toggling "latest" on a release is the rollout
+   gate. Tag a `desktop-vX.Y.Z`, let CI build a *draft* release, verify,
+   then click Publish + "Set as latest". All running desktop clients
+   pick it up on their next updater poll.
+
+The release workflow runs `.github/workflows/merge-latest-json.py` to
+combine the four per-platform manifests (`windows-x86_64`,
+`darwin-x86_64`, `darwin-aarch64`, `linux-x86_64`) into one before
+upload — `tauri build` emits a single-platform manifest per matrix
+runner, and the updater needs all four entries in one file.
+
+#### Custom-domain fallback
+
+`tauri.conf.json` lists a second endpoint:
+
+```text
+https://releases.nftones.app/desktop/latest.json
+```
+
+Tauri's updater tries endpoints in order, so if you later move to
+Cloudflare R2 / a CDN behind `releases.nftones.app`, point the DNS at
+the new bucket and upload the same `latest.json` produced by CI. No
+desktop-app change needed — every shipped client already polls both.
+
+If you don't want the custom domain right now, the GitHub Releases
+endpoint alone is fully sufficient. The second entry is forward-looking
+optionality, not a requirement.
+
+#### Manual `latest.json` upload (for off-CI testing)
+
+If you ever sign a build locally and want to test the auto-update path
+without going through CI:
+
+```powershell
+# After `npm run build` in desktop/
+$JSON = "src-tauri/target/release/bundle/<platform>/latest.json"
+# Upload that file to whatever you want the desktop app to poll.
+```
+
+The merge script (`.github/workflows/merge-latest-json.py`) accepts a
+directory argument and walks it recursively — usable locally too.
+
 ## Phase F — Dry run
 
 1. Push a test tag:

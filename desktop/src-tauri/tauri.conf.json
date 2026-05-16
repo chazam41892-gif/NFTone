@@ -84,7 +84,8 @@
     "updater": {
       "active": true,
       "endpoints": [
-        "https://releases.nftones.app/desktop/{{target}}/{{current_version}}"
+        "https://github.com/chazam41892-gif/NFTone/releases/latest/download/latest.json",
+        "https://releases.nftones.app/desktop/latest.json"
       ],
       "dialog": false,
       "pubkey": "REPLACE_WITH_GENERATED_PUBKEY_FROM_TAURI_SIGNER"
