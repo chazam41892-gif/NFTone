@@ -1,9 +1,9 @@
 "use client";
 
 import { useWallet } from "@solana/wallet-adapter-react";
-import { WalletMultiButton } from "@solana/wallet-adapter-react-ui";
 import bs58 from "bs58";
 import { useEffect, useMemo, useState } from "react";
+import WalletButton from "@/components/WalletButton";
 
 type Phase =
   | "missing-params"
@@ -137,7 +137,7 @@ export default function SignInDesktopFlow() {
         <p className="text-xs uppercase tracking-widest text-zinc-500 mb-2">
           Step 1 &mdash; Connect a wallet
         </p>
-        <WalletMultiButton />
+        <WalletButton />
         {wallet && (
           <p className="mt-2 text-xs text-zinc-500" aria-live="polite">
             Selected adapter: {wallet.adapter.name}
