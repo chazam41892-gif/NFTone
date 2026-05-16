@@ -1,0 +1,96 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NFTones",
+  "version": "0.1.0",
+  "identifier": "app.nftones.desktop",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "devUrl": "http://localhost:3000",
+    "frontendDist": "../dist-empty"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "NFTones",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 600,
+        "resizable": true,
+        "fullscreen": false,
+        "decorations": true,
+        "transparent": false,
+        "url": "http://localhost:3000",
+        "label": "main"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' http://localhost:* https://*.supabase.co https://*.solana.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https://api.fontshare.com https://cdn.fontshare.com; frame-src 'self'",
+      "capabilities": ["main"]
+    }
+  },
+  "bundle": {
+    "active": true,
+    "category": "Music",
+    "copyright": "Copyright 2026 NFTones. All rights reserved.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "longDescription": "NFTones desktop — provenance-tracked audio drops on Solana. Native shell wraps the NFTones web app with offline watermark detection and OS-native wallet integration.",
+    "publisher": "NFTones",
+    "shortDescription": "NFTones desktop shell",
+    "targets": ["msi", "nsis", "dmg", "app", "deb", "appimage"],
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "https://timestamp.acs.microsoft.com",
+      "tsp": false,
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "wix": {
+        "language": ["en-US"]
+      },
+      "nsis": {
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico",
+        "installMode": "perUser"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.15",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "entitlements": null
+    },
+    "linux": {
+      "deb": {
+        "depends": []
+      }
+    },
+    "externalBin": [
+      "binaries/audio_watermarker"
+    ],
+    "resources": []
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["nftones"]
+      }
+    },
+    "updater": {
+      "active": false,
+      "endpoints": [
+        "https://releases.nftones.app/desktop/{{target}}/{{current_version}}"
+      ],
+      "dialog": true,
+      "pubkey": ""
+    }
+  }
+}
