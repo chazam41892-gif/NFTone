@@ -8,7 +8,8 @@ use crate::sidecar::WATERMARKER_PORT;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use tauri::AppHandle;
+#[allow(deprecated)]
 use tauri_plugin_shell::ShellExt;
 
 fn watermarker_base() -> String {
@@ -29,6 +30,7 @@ pub async fn app_version() -> AppResult<String> {
 }
 
 #[tauri::command]
+#[allow(deprecated)] // TODO: migrate to tauri-plugin-opener
 pub async fn open_external(app: AppHandle, url: String) -> AppResult<()> {
     app.shell()
         .open(url, None)
@@ -61,13 +63,17 @@ pub async fn request_wallet_signin(
     app: AppHandle,
     signin_url: String,
 ) -> AppResult<WalletSigninRequest> {
-    // Generate a one-time `state` token. The frontend stores it and matches
-    // it against the deep-link callback to defeat callback-injection.
-    let state = uuid_v4();
+    // Cryptographically-secure state token. The frontend stores it and
+    // matches it against the deep-link callback to defeat callback-injection
+    // (an attacker handing the user a crafted nftones://auth/callback URL).
+    let state = uuid::Uuid::new_v4().to_string();
     let callback_url = "nftones://auth/callback".to_string();
+    // URL-encode the callback so it survives intact through the query string.
+    let encoded_callback: String = url::form_urlencoded::byte_serialize(callback_url.as_bytes()).collect();
     let full_url = format!(
-        "{signin_url}?desktop=1&state={state}&callback={callback_url}"
+        "{signin_url}?desktop=1&state={state}&callback={encoded_callback}"
     );
+    #[allow(deprecated)] // TODO: migrate to tauri-plugin-opener
     app.shell()
         .open(full_url, None)
         .map_err(|e| AppError::Other(format!("shell open: {e}")))?;
@@ -75,18 +81,6 @@ pub async fn request_wallet_signin(
         state,
         callback_url,
     })
-}
-
-// Cheap RFC-4122-shaped token. Not crypto-grade UUID v4 — we just need
-// uniqueness per sign-in attempt. Frontend can substitute crypto.randomUUID
-// when desired.
-fn uuid_v4() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    let n = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_nanos())
-        .unwrap_or(0);
-    format!("{:032x}", n)
 }
 
 // ---------- Session storage (OS keychain via crate::session) ----------

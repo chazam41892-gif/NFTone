@@ -89,7 +89,8 @@ pub fn spawn_watermarker(app: &AppHandle) -> Result<(), Box<dyn std::error::Erro
 /// Kill the sidecar — invoked on graceful shutdown.
 pub fn kill_watermarker(app: &AppHandle) {
     let state: State<'_, SidecarState> = app.state();
-    if let Some(child) = state.child.lock().unwrap().take() {
+    let child = state.child.lock().unwrap().take();
+    if let Some(child) = child {
         let _ = child.kill();
     }
 }

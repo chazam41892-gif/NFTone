@@ -21,12 +21,12 @@
         "fullscreen": false,
         "decorations": true,
         "transparent": false,
-        "url": "http://localhost:3000",
+        "url": "https://nftones.app",
         "label": "main"
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' http://localhost:* https://*.supabase.co https://*.solana.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://*.supabase.co; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https://api.fontshare.com https://cdn.fontshare.com; frame-src 'self'",
+      "csp": "default-src 'self'; img-src 'self' data: https:; media-src 'self' data: blob: https:; connect-src 'self' http://localhost:* https://nftones.app https://*.nftones.app https://*.supabase.co https://*.solana.com https://api.devnet.solana.com https://api.mainnet-beta.solana.com wss://*.supabase.co wss://*.nftones.app; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://api.fontshare.com; font-src 'self' data: https://api.fontshare.com https://cdn.fontshare.com; frame-src 'self'",
       "capabilities": ["main"]
     }
   },
@@ -59,7 +59,7 @@
       "nsis": {
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico",
-        "installMode": "perUser"
+        "installMode": "currentUser"
       }
     },
     "macOS": {
@@ -73,9 +73,6 @@
         "depends": []
       }
     },
-    "externalBin": [
-      "binaries/audio_watermarker"
-    ],
     "resources": []
   },
   "plugins": {

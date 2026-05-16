@@ -6,6 +6,21 @@
   "permissions": [
     "core:default",
     "shell:allow-open",
+    {
+      "identifier": "shell:allow-execute",
+      "allow": [
+        {
+          "name": "binaries/audio_watermarker",
+          "sidecar": true,
+          "args": [
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8501"
+          ]
+        }
+      ]
+    },
     "dialog:allow-open",
     "dialog:allow-save",
     "fs:allow-read-file",

@@ -3,7 +3,16 @@ mod sidecar;
 mod session;
 mod error;
 
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{Emitter, RunEvent};
+
+/// Where the webview points by default in dev builds. Prod points at
+/// `https://nftones.app` (configured in tauri.conf.json → windows[0].url).
+/// In debug builds we re-navigate to localhost so `npm run dev` against the
+/// Next.js app at :3000 works.
+///
+/// Override at runtime by setting `NFTONES_DESKTOP_URL` before launch —
+/// useful for QA against a preview deploy without rebuilding the shell.
+const DEV_FALLBACK_URL: &str = "http://localhost:3000";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -33,6 +42,29 @@ pub fn run() {
                     let _ = handle.emit("deep-link", &urls);
                 });
                 let _ = app.deep_link().register_all();
+            }
+
+            // Dev-build URL override. Prod stays on the JSON-configured URL
+            // (https://nftones.app). Debug builds and NFTONES_DESKTOP_URL
+            // overrides re-navigate the main window after creation.
+            #[cfg(desktop)]
+            {
+                use tauri::Manager;
+                let override_url = std::env::var("NFTONES_DESKTOP_URL").ok();
+                let target = override_url.as_deref().or_else(|| {
+                    if cfg!(debug_assertions) {
+                        Some(DEV_FALLBACK_URL)
+                    } else {
+                        None
+                    }
+                });
+                if let Some(url) = target {
+                    if let Some(window) = app.get_webview_window("main") {
+                        if let Ok(parsed) = url.parse() {
+                            let _ = window.navigate(parsed);
+                        }
+                    }
+                }
             }
 
             // Spin up the bundled watermarker sidecar (no-op if binary

@@ -116,9 +116,21 @@ pyinstaller --onefile -n audio_watermarker src/api_runner.py   # (script TBD)
 # Copy dist\audio_watermarker.exe to desktop\src-tauri\binaries\audio_watermarker-x86_64-pc-windows-msvc.exe
 ```
 
-When the binary is missing, `sidecar.rs` logs a warning and the shell
-runs without it. `watermarker_health` returns `false`; the frontend can
-fall back to a cloud-hosted watermarker URL.
+Then, to wire the binary into the bundle, add this back into
+`tauri.conf.json` under `bundle`:
+
+```json
+"externalBin": ["binaries/audio_watermarker"]
+```
+
+(Removed from the default config because Tauri's build script validates
+the file exists at compile time, which would block fresh-clone builds
+before anyone produces the binary.)
+
+When the binary is missing OR not declared in `externalBin`, `sidecar.rs`
+logs a warning and the shell runs without it. `watermarker_health`
+returns `false`; the frontend can fall back to a cloud-hosted
+watermarker URL.
 
 ## Deep-link wallet sign-in flow
 

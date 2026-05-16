@@ -17,7 +17,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.0.4", features = [] }
 
 [dependencies]
-tauri = { version = "2.1.1", features = ["protocol-asset"] }
+tauri = { version = "2.1.1", features = [] }
 tauri-plugin-deep-link = "2.0.1"
 tauri-plugin-dialog = "2.0.3"
 tauri-plugin-fs = "2.0.3"
@@ -38,6 +38,10 @@ thiserror = "1"
 # OS keychain for session/token storage. Cross-platform: macOS Keychain,
 # Windows Credential Manager, Linux Secret Service / kwallet.
 keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+# Cryptographically-secure UUIDs for sign-in state tokens (CSRF defense on
+# the nftones://auth/callback deep-link round-trip).
+uuid = { version = "1", features = ["v4"] }
 
 [features]
 # This feature is used for production builds or when a dev server is not
