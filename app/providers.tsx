@@ -13,6 +13,8 @@ import {
 import { useMemo } from "react";
 
 import "@solana/wallet-adapter-react-ui/styles.css";
+import DesktopDeepLinkHandler from "@/components/DesktopDeepLinkHandler";
+import DesktopBadge from "@/components/DesktopBadge";
 
 const endpoint =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL || "https://api.devnet.solana.com";
@@ -27,7 +29,11 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <SessionProvider>
       <ConnectionProvider endpoint={endpoint}>
         <WalletProvider wallets={wallets} autoConnect>
-          <WalletModalProvider>{children}</WalletModalProvider>
+          <WalletModalProvider>
+            {children}
+            <DesktopBadge />
+            <DesktopDeepLinkHandler />
+          </WalletModalProvider>
         </WalletProvider>
       </ConnectionProvider>
     </SessionProvider>

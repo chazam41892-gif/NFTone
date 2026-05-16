@@ -279,6 +279,27 @@ pub async fn watermarker_detect(
     })
 }
 
+// ---------- Native file picker ----------
+//
+// Wraps tauri-plugin-dialog so the webview can request a file path without
+// pulling @tauri-apps/plugin-dialog into Stack B's bundle. The Verify page
+// uses this to hand a real OS path to watermarker_detect.
+
+#[tauri::command]
+pub async fn pick_audio_file(app: AppHandle) -> AppResult<Option<String>> {
+    use tauri_plugin_dialog::DialogExt;
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    let _ = app
+        .dialog()
+        .file()
+        .add_filter("Audio", &["wav", "mp3", "m4a", "aac", "flac", "ogg"])
+        .pick_file(move |path| {
+            let _ = tx.send(path);
+        });
+    let picked = rx.await.ok().flatten();
+    Ok(picked.map(|p| p.to_string()))
+}
+
 fn mime_for(filename: &str) -> String {
     let ext = filename.rsplit('.').next().unwrap_or("").to_lowercase();
     match ext.as_str() {

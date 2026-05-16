@@ -1,5 +1,4 @@
-import WalletButton from "@/components/WalletButton";
-import SignInButton from "@/components/SignInButton";
+import AdaptiveSignIn from "@/components/AdaptiveSignIn";
 
 export default function SignInPage() {
   return (
@@ -14,13 +13,12 @@ export default function SignInPage() {
           password. No email required to start.
         </p>
 
-        <div className="mt-8 space-y-4">
-          <WalletButton />
-          <SignInButton />
+        <div className="mt-8">
+          <AdaptiveSignIn />
         </div>
 
         <p className="mt-8 text-xs text-zinc-500">
-          By signing in, you confirm you have read and accept the platform's
+          By signing in, you confirm you have read and accept the platform&apos;s
           terms. Free to start. Mint when sold.
         </p>
       </section>

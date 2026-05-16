@@ -82,6 +82,7 @@ pub fn run() {
             commands::watermarker_health,
             commands::watermarker_embed,
             commands::watermarker_detect,
+            commands::pick_audio_file,
             commands::check_for_updates,
             commands::updater_install,
         ])

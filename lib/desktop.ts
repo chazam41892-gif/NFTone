@@ -115,6 +115,14 @@ export const watermarker = {
     tauriInvoke<DetectResult>("watermarker_detect", { audioPath, releaseId }),
 };
 
+// ---------- Native dialogs (OS file picker, etc.) ----------
+
+export const dialog = {
+  /** Open the OS file picker scoped to audio formats. Returns the absolute
+   *  path the user picked, or null if they cancelled. */
+  pickAudioFile: () => tauriInvoke<string | null>("pick_audio_file"),
+};
+
 // ---------- Updater ----------
 
 export type UpdateInfo =
