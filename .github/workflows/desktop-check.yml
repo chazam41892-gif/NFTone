@@ -1,0 +1,67 @@
+name: desktop-check
+
+# Per-PR + main-push smoke check for the Tauri desktop shell.
+# Cheap: `cargo check` (no full build) + Tauri config validation.
+# The full build + sign + release path lives in desktop-release.yml,
+# which only runs on `desktop-v*` tags.
+
+on:
+  pull_request:
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "desktop/**"
+      - ".github/workflows/desktop-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build deps
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libdbus-1-dev pkg-config
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "./desktop/src-tauri -> target"
+
+      - name: cargo check (desktop shell)
+        working-directory: desktop/src-tauri
+        run: cargo check --all-targets
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install desktop deps
+        working-directory: desktop
+        run: npm ci
+
+      - name: Validate tauri.conf.json (parse + schema)
+        working-directory: desktop
+        run: npx tauri info
