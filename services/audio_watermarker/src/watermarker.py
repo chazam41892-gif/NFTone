@@ -49,7 +49,7 @@ DEFAULT_FREQ_HI_HZ = 4_000.0
 # the band edge by a few dB.
 DEFAULT_FREQ_LO2_HZ = 100.0
 DEFAULT_FREQ_HI2_HZ = 450.0
-DEFAULT_ALPHA = 0.05  # embedding strength; higher = more robust but more audible
+DEFAULT_ALPHA = 0.08  # embedding strength; higher = more robust but more audible
 DEFAULT_DETECTION_THRESHOLD = 0.15  # normalized correlation; tune via tests
 
 # --- v2 robustness upgrades (loophole-architect) -----------------------------
@@ -203,10 +203,21 @@ def embed(
     return watermarked.astype(np.float32)
 
 
+def _whiten(env: np.ndarray, window_size: int = 11) -> np.ndarray:
+    """Apply local moving-average normalization to remove slow musical dynamics."""
+    if len(env) < window_size:
+        return env
+    padded = np.pad(env, window_size // 2, mode="edge")
+    lowpass = np.convolve(padded, np.ones(window_size) / window_size, mode="valid")
+    lowpass = lowpass[:len(env)]
+    lowpass = np.where(lowpass < 1e-9, 1e-9, lowpass)
+    return (env / lowpass).astype(np.float32)
+
+
 def _envelope(audio: np.ndarray, params: WatermarkParams) -> np.ndarray:
     """Mid-frequency (primary band) magnitude envelope, per frame.
 
-    Kept as a single-band convenience for legacy callers / tests. New detection
+    Kept as a-single-band convenience for legacy callers / tests. New detection
     code should use `_envelopes` which returns one envelope per active band.
     """
     Zxx = _stft(audio, params)
@@ -214,7 +225,8 @@ def _envelope(audio: np.ndarray, params: WatermarkParams) -> np.ndarray:
     band = _band_indices(n_bins, params)
     if band.size == 0:
         return np.zeros(Zxx.shape[0], dtype=np.float32)
-    return np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32)
+    env = np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32)
+    return _whiten(env)
 
 
 def _envelopes(audio: np.ndarray, params: WatermarkParams) -> list[np.ndarray]:
@@ -230,10 +242,12 @@ def _envelopes(audio: np.ndarray, params: WatermarkParams) -> list[np.ndarray]:
     out: list[np.ndarray] = []
     band = _band_indices(n_bins, params)
     if band.size > 0:
-        out.append(np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32))
+        env = np.abs(Zxx[:, band]).mean(axis=1).astype(np.float32)
+        out.append(_whiten(env))
     band_lo = _band_indices_low(n_bins, params)
     if band_lo.size > 0:
-        out.append(np.abs(Zxx[:, band_lo]).mean(axis=1).astype(np.float32))
+        env_lo = np.abs(Zxx[:, band_lo]).mean(axis=1).astype(np.float32)
+        out.append(_whiten(env_lo))
     if not out:
         out.append(np.zeros(Zxx.shape[0], dtype=np.float32))
     return out

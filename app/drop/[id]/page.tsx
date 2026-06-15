@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import PurchaseDropForm from "@/components/PurchaseDropForm";
 
 export default async function DropPage({ params }: { params: { id: string } }) {
   const drop = await prisma.drop.findUnique({
@@ -29,7 +30,7 @@ export default async function DropPage({ params }: { params: { id: string } }) {
         )}
 
         <p className="text-sm uppercase tracking-[0.25em] text-purple-300">
-          NFTones Drop
+          NFTonez Drop
         </p>
 
         <h1 className="mt-3 text-4xl font-bold">{drop.title}</h1>
@@ -50,18 +51,11 @@ export default async function DropPage({ params }: { params: { id: string } }) {
           <p>Rights: {drop.rights?.fanCollectibleOnly ? "Fan collectible" : "License-enabled"}</p>
         </div>
 
-        <form action={`/api/drops/${drop.id}/purchase`} method="POST" className="mt-6">
-          <input
-            name="buyerWallet"
-            placeholder="Buyer Solana wallet"
-            className="w-full rounded-xl bg-black p-3"
-            required
-          />
-
-          <button className="mt-4 rounded-2xl bg-white px-6 py-3 font-bold text-black">
-            Buy / Mint When Sold
-          </button>
-        </form>
+        <PurchaseDropForm
+          dropId={drop.id}
+          priceUsd={drop.priceUsd}
+          priceKtrs={drop.priceKtrs || (drop.priceUsd ? drop.priceUsd * 10 : 10)}
+        />
       </section>
     </main>
   );

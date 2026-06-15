@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { mintNftOnPurchase } from "@/lib/solanaMint";
 import { embedWatermark, watermarkerHealth } from "@/lib/watermarker";
 import { downloadAudio, uploadWatermarkedAudio } from "@/lib/storage";
+import { spendKtrsCredits } from "@/lib/ktrs";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -42,35 +43,78 @@ export async function POST(
       );
     }
 
-    /*
-      PRODUCTION TODO — payment:
-        1. Take payment first (Stripe / on-chain SOL / KTRS spend).
-        2. Confirm the payment is final.
-        3. Only then proceed with watermark + mint.
-      For now, this route treats the request as already-paid. Gate it behind
-      auth and a payment processor before going live.
-    */
+    // Edition Size Limit Check
+    if (drop.editionSize) {
+      const completedCount = await prisma.purchase.count({
+        where: {
+          dropId: drop.id,
+          status: { in: ["PAID", "WATERMARKED", "MINTED", "DELIVERED"] },
+        },
+      });
+      if (completedCount >= drop.editionSize) {
+        return NextResponse.json(
+          { error: "This drop is sold out.", code: "SOLD_OUT" },
+          { status: 403 }
+        );
+      }
+    }
 
+    // Look up or auto-onboard user
+    let user = await prisma.user.findUnique({
+      where: { wallet: buyerWallet },
+      include: { ktrsCredits: true }
+    });
+
+    if (!user) {
+      // Auto-onboard with 100 promo credits for testing
+      user = await prisma.user.create({
+        data: {
+          wallet: buyerWallet,
+          ktrsCredits: {
+            create: { balance: 100.0 }
+          }
+        },
+        include: { ktrsCredits: true }
+      });
+    }
+
+    const priceKtrs = drop.priceKtrs || (drop.priceUsd ? drop.priceUsd * 10 : 10);
+
+    // Debit the user's credits
+    try {
+      await spendKtrsCredits(user.id, priceKtrs);
+    } catch (err: any) {
+      if (err.message && err.message.includes("Insufficient")) {
+        return NextResponse.json(
+          { error: `Insufficient $KTRS. Action requires ${priceKtrs} $KTRS.`, code: "INSUFFICIENT_KTRS" },
+          { status: 402 } // 402 Payment Required
+        );
+      }
+      throw err;
+    }
+
+    // Immediately create the purchase record with status PAID
     const purchase = await prisma.purchase.create({
       data: {
         dropId: drop.id,
         buyerWallet,
         amountUsd: drop.priceUsd,
+        amountKtrs: priceKtrs,
         status: "PAID",
       },
     });
 
-    let watermarkResult: Awaited<ReturnType<typeof embedWatermark>> | null =
-      null;
-    let watermarkedUrl: string | null = null;
-    let watermarkSkippedReason: string | null = null;
-
-    const wmAlive = await watermarkerHealth();
-    if (!wmAlive) {
-      watermarkSkippedReason =
-        "Watermarker service not reachable. Start it with `uvicorn src.api:app --port 8500` in services/audio_watermarker, or set NFTONES_WATERMARKER_URL.";
-    } else {
+    // Run the watermarking and Metaplex minting asynchronously in the background
+    (async () => {
       try {
+        let watermarkResult: any = null;
+        let watermarkedUrl: string | null = null;
+
+        const wmAlive = await watermarkerHealth();
+        if (!wmAlive) {
+          throw new Error("Watermarker service not reachable.");
+        }
+
         const src = await downloadAudio(drop.audioUrl);
         watermarkResult = await embedWatermark(
           src.buffer,
@@ -102,85 +146,65 @@ export async function POST(
             data: { masterSha256: watermarkResult.masterSha256 },
           });
         }
-      } catch (err: any) {
+
+        // Mint the NFT on Solana devnet/mainnet
+        const mintResult = await mintNftOnPurchase({
+          dropId: drop.id,
+          title: drop.title,
+          description: drop.description || undefined,
+          audioUrl: watermarkedUrl || drop.audioUrl,
+          coverArtUrl: drop.coverArtUrl || undefined,
+          artistWallet: drop.artistProfile.user.wallet as string,
+          buyerWallet,
+        });
+
+        if (mintResult.status === "minted") {
+          await prisma.purchase.update({
+            where: { id: purchase.id },
+            data: {
+              status: "MINTED",
+              txSignature: mintResult.txSignature,
+              mintedNftAddress: mintResult.mintedNftAddress,
+            },
+          });
+          await prisma.drop.update({
+            where: { id: drop.id },
+            data: {
+              status: "MINTED",
+              mintedNftAddress: mintResult.mintedNftAddress,
+            },
+          });
+        } else if (mintResult.status === "failed") {
+          throw new Error(`Minting failed: ${mintResult.error}`);
+        } else {
+          // Status pending / other lazy-mint options
+          await prisma.drop.update({
+            where: { id: drop.id },
+            data: { status: "SOLD" },
+          });
+        }
+      } catch (bgErr: any) {
+        console.error(`Background watermarking/minting failed for purchase ${purchase.id}:`, bgErr);
         await prisma.purchase.update({
           where: { id: purchase.id },
           data: {
             status: "FAILED",
-            failureReason: `Watermark failed: ${err?.message ?? err}`,
+            failureReason: bgErr?.message ?? String(bgErr),
           },
         });
-        return NextResponse.json(
-          { error: `Watermark failed: ${err?.message ?? err}` },
-          { status: 502 }
-        );
       }
-    }
+    })();
 
-    const mintResult = await mintNftOnPurchase({
-      dropId: drop.id,
-      title: drop.title,
-      description: drop.description || undefined,
-      audioUrl: watermarkedUrl || drop.audioUrl,
-      coverArtUrl: drop.coverArtUrl || undefined,
-      artistWallet: drop.artistProfile.user.wallet,
-      buyerWallet,
-    });
-
-    if (mintResult.status === "minted") {
-      await prisma.purchase.update({
-        where: { id: purchase.id },
-        data: {
-          status: "MINTED",
-          txSignature: mintResult.txSignature,
-          mintedNftAddress: mintResult.mintedNftAddress,
-        },
-      });
-      await prisma.drop.update({
-        where: { id: drop.id },
-        data: {
-          status: "MINTED",
-          mintedNftAddress: mintResult.mintedNftAddress,
-        },
-      });
-    } else if (mintResult.status === "failed") {
-      await prisma.purchase.update({
-        where: { id: purchase.id },
-        data: {
-          status: "FAILED",
-          failureReason: `Mint failed: ${mintResult.error}`,
-        },
-      });
-      return NextResponse.json(
-        {
-          error: `Mint failed: ${mintResult.error}`,
-          purchase: { id: purchase.id, status: "FAILED" },
-        },
-        { status: 502 }
-      );
-    } else {
-      await prisma.drop.update({
-        where: { id: drop.id },
-        data: { status: "SOLD" },
-      });
-    }
-
+    // Instantly return a success status to the buyer within <200ms
     return NextResponse.json({
+      success: true,
       purchase: {
         id: purchase.id,
-        status:
-          mintResult.status === "minted"
-            ? "MINTED"
-            : watermarkResult
-              ? "WATERMARKED"
-              : "PAID",
-        watermarkedAudioUrl: watermarkedUrl,
-        derivativeSha256: watermarkResult?.derivativeSha256 ?? null,
-        walletFingerprint: watermarkResult?.walletFingerprint ?? null,
+        status: "PAID",
       },
-      mint: mintResult,
-      watermarkSkippedReason,
+      message: "Purchase initialized. Watermarking and on-chain minting are running in the background.",
     });
+
   } catch (error: any) {
     return NextResponse.json(
       { error: error.message || "Purchase failed." },

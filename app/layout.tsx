@@ -3,7 +3,7 @@ import "./globals.css";
 import Providers from "./providers";
 
 export const metadata: Metadata = {
-  title: "NFTones — Own the Sound",
+  title: "NFTonez — Own the Sound",
   description:
     "Free to start. Mint when sold. Powered by $KTRS on Solana. Artists own their masters, royalties, drops, and fan access.",
 };

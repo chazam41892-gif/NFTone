@@ -6,8 +6,14 @@ export default function HomePage() {
           Powered by $KTRS on Solana
         </p>
 
+
+        <div className="flex items-center gap-4 mb-4">
+          <img src="/logo.png" alt="NFTonez Logo" className="h-16 w-16 object-contain rounded-xl border border-purple-500/30" />
+          <span className="text-xl font-bold tracking-[0.2em] text-purple-400 uppercase">NFTonez</span>
+        </div>
+
         <h1 className="text-5xl font-bold tracking-tight md:text-7xl">
-          NFTones: Own the Sound.
+          NFTonez: Own the Sound.
         </h1>
 
         <p className="mt-6 max-w-2xl text-lg text-zinc-300">

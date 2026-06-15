@@ -10,7 +10,26 @@
       "Bash(python -m venv .venv)",
       "Bash(.venv/Scripts/python.exe -m pip install --quiet -r requirements-dev.txt)",
       "Bash(.venv/Scripts/python.exe -m pytest -q)",
-      "Bash(.venv/Scripts/python.exe -m pip install --timeout 60 -r requirements-dev.txt)"
+      "Bash(.venv/Scripts/python.exe -m pip install --timeout 60 -r requirements-dev.txt)",
+      "PowerShell($env:NODE_EXTRA_CA_CERTS = \"$env:USERPROFILE\\\\.node-certs\\\\avast-root.pem\"; npm run dev 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\next-dev.log\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "Bash(node -e 'const{PrismaClient}=require\\('\\\\''@prisma/client'\\\\''\\);const p=new PrismaClient\\(\\);p.$queryRaw`SELECT table_name FROM information_schema.tables WHERE table_schema='\\\\''public'\\\\'' ORDER BY table_name`.then\\(r=>{console.log\\('\\\\''PUBLIC SCHEMA TABLES:'\\\\''\\);console.log\\(JSON.stringify\\(r,null,2\\)\\);return p.$disconnect\\(\\)}\\).catch\\(e=>{console.error\\('\\\\''ERR:'\\\\'',e.message\\);process.exit\\(1\\)}\\)')",
+      "PowerShell($env:NODE_EXTRA_CA_CERTS = \"$env:USERPROFILE\\\\.node-certs\\\\avast-root.pem\"; npm run dev 2>&1 | Tee-Object -FilePath \"$env:TEMP\\\\next-dev2.log\")",
+      "Bash(git commit -m ' *)",
+      "Skill(st-claudly-clooright)",
+      "Skill(st-claudly-clooright:*)",
+      "mcp__claude_ai_Microsoft_Learn__microsoft_docs_search",
+      "Bash(rustc --version)",
+      "Bash(cargo --version)",
+      "Bash(rustup --version)",
+      "Bash(npx --no @tauri-apps/cli --version)",
+      "Bash(where cl.exe)",
+      "Bash(powershell -NoProfile -Command \"\\(Get-ItemProperty 'HKLM:\\\\SOFTWARE\\\\WOW6432Node\\\\Microsoft\\\\EdgeUpdate\\\\Clients\\\\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue\\).pv\")",
+      "PowerShell($env:NODE_EXTRA_CA_CERTS = \"$env:USERPROFILE\\\\.node-certs\\\\avast-root.pem\"; npm install --no-audit --no-fund 2>&1 | Select-Object -Last 10)",
+      "Bash(CARGO_HTTP_CHECK_REVOKE=false cargo check --message-format short)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(CARGO_HTTP_CHECK_REVOKE=false cargo check)"
     ]
   },
   "disabledMcpjsonServers": [

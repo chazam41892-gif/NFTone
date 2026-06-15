@@ -64,6 +64,12 @@ _FORMAT_ALIASES = {
     "audio/m4a": "m4a",
     "audio/flac": "flac",
     "audio/x-flac": "flac",
+    # Video formats
+    "video/mp4": "mp4",
+    "video/quicktime": "mov",
+    "video/x-matroska": "mkv",
+    "video/webm": "webm",
+    "video/x-msvideo": "avi",
 }
 
 
@@ -71,7 +77,7 @@ def _format_from_filename(name: str | None) -> str | None:
     if not name:
         return None
     ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
-    if ext in {"wav", "mp3", "aac", "m4a", "flac"}:
+    if ext in {"wav", "mp3", "aac", "m4a", "flac", "mp4", "mov", "mkv", "webm", "avi"}:
         return ext
     return None
 
@@ -89,12 +95,12 @@ def _resolve_format(content_type: str | None, filename: str | None) -> str:
 def _load_audio(
     blob: bytes, content_type: str | None, filename: str | None
 ) -> tuple[np.ndarray, int, str, bool]:
-    """Decode any of wav/mp3/aac/m4a/flac → (samples, sr, fmt, is_stereo).
+    """Decode any of wav/mp3/aac/m4a/flac/mp4/mov/mkv/webm/avi → (samples, sr, fmt, is_stereo).
 
     Returns:
         samples: (n,) mono or (n,2) stereo float32 in [-1, 1]
         sr: sample rate
-        fmt: canonical format tag ('wav'|'mp3'|'aac'|'m4a'|'flac')
+        fmt: canonical format tag
         is_stereo: True if the source was stereo (we preserve it)
     """
     fmt = _resolve_format(content_type, filename)
@@ -104,9 +110,11 @@ def _load_audio(
         except Exception as e:
             raise HTTPException(400, f"Could not parse WAV: {e}")
         is_stereo = audio.ndim == 2 and audio.shape[1] == 2
+        if len(audio) == 0:
+            raise HTTPException(400, "Empty audio stream.")
         return audio.astype(np.float32), int(sr), fmt, is_stereo
 
-    # mp3 / aac / m4a / flac via pydub+ffmpeg
+    # mp3 / aac / m4a / flac / video via pydub+ffmpeg
     if not _PYDUB_OK:
         raise HTTPException(
             415,
@@ -114,11 +122,22 @@ def _load_audio(
         )
     try:
         seg = AudioSegment.from_file(io.BytesIO(blob), format=fmt)
+    except IndexError:
+        raise HTTPException(400, f"No audio track found in the uploaded {fmt} file.")
     except Exception as e:
         raise HTTPException(400, f"Could not decode {fmt}: {e}")
     sr = int(seg.frame_rate)
     channels = int(seg.channels)
-    samples = np.array(seg.get_array_of_samples(), dtype=np.float32)
+    
+    # Extract raw samples
+    raw_data = seg.get_array_of_samples()
+    if len(raw_data) == 0:
+        raise HTTPException(
+            400,
+            f"No audio track or empty audio stream found in the uploaded {fmt} file."
+        )
+        
+    samples = np.array(raw_data, dtype=np.float32)
     # Normalize integer PCM into [-1, 1]
     max_amp = float(1 << (8 * seg.sample_width - 1))
     samples = samples / max_amp
@@ -170,10 +189,75 @@ def _encode_audio(
     elif fmt == "flac":
         seg.export(buf, format="flac")
         mime = "audio/flac"
-    else:
-        seg.export(buf, format="wav")
-        mime = "audio/wav"
     return buf.getvalue(), mime
+
+
+def _encode_video_with_audio(
+    samples: np.ndarray, sr: int, fmt: str, video_bytes: bytes
+) -> tuple[bytes, str]:
+    """Mux watermarked audio back into the original video container using ffmpeg."""
+    import subprocess
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio:
+        audio_path = temp_audio.name
+    
+    try:
+        sf.write(audio_path, samples, sr, format="WAV", subtype="FLOAT")
+        
+        with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as temp_video:
+            video_path = temp_video.name
+            temp_video.write(video_bytes)
+            
+        with tempfile.NamedTemporaryFile(suffix=f".{fmt}", delete=False) as temp_output:
+            output_path = temp_output.name
+            
+        if fmt == "webm":
+            acodec = "libopus"
+            mime = "video/webm"
+        elif fmt == "mp4":
+            acodec = "aac"
+            mime = "video/mp4"
+        elif fmt == "mov":
+            acodec = "aac"
+            mime = "video/quicktime"
+        elif fmt == "mkv":
+            acodec = "aac"
+            mime = "video/x-matroska"
+        elif fmt == "avi":
+            acodec = "mp3"
+            mime = "video/x-msvideo"
+        else:
+            acodec = "aac"
+            mime = f"video/{fmt}"
+
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-i", audio_path,
+            "-map", "0:v?",          # Map video stream from input 0 if present
+            "-map", "1:a:0",         # Map audio stream from input 1
+            "-c:v", "copy",          # Direct stream copy video (no re-encoding)
+            "-c:a", acodec,          # Encode audio to appropriate codec
+            "-y",                    # Overwrite output file
+            output_path
+        ]
+        
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        
+        with open(output_path, "rb") as f:
+            out_bytes = f.read()
+            
+        return out_bytes, mime
+        
+    except Exception as e:
+        raise HTTPException(500, f"Failed to mux watermarked audio into video container: {e}")
+    finally:
+        for p in (audio_path, video_path, output_path):
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
 
 # Master secret for PN sequence derivation. In production this MUST come
 # from a secrets manager (Vault, AWS Secrets Manager, Cloudflare Worker
@@ -284,7 +368,10 @@ async def embed_endpoint(
         # SQLite uniqueness violation, etc.
         raise HTTPException(409, f"Could not record watermark: {e}")
 
-    out_bytes, mime = _encode_audio(watermarked, sr, fmt)
+    if fmt in {"mp4", "mov", "mkv", "webm", "avi"}:
+        out_bytes, mime = _encode_video_with_audio(watermarked, sr, fmt, blob)
+    else:
+        out_bytes, mime = _encode_audio(watermarked, sr, fmt)
     buf = io.BytesIO(out_bytes)
     buf.seek(0)
 

@@ -12,6 +12,9 @@
     "prisma:validate": "prisma validate"
   },
   "dependencies": {
+    "@metaplex-foundation/mpl-token-metadata": "^3.4.0",
+    "@metaplex-foundation/umi": "^1.5.1",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
     "@prisma/client": "5.22.0",
     "@solana/wallet-adapter-base": "0.9.23",
     "@solana/wallet-adapter-react": "0.15.35",
